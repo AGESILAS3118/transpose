@@ -1,0 +1,15 @@
+# Go
+/bin/
+*.test
+*.out
+
+# Build artifacts
+/transpose
+/xpose
+*.tar.zst
+*.db
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
