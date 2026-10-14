@@ -1,0 +1,70 @@
+====================================================
+TRANSPOSE — SUIVI D'AVANCEMENT
+Dernière mise à jour : 2026-10-14
+====================================================
+
+[PHASE 0 — VALIDATION] (2 semaines)
+[ ] P0.1 — Reproduire et documenter le cas dnf5 "list installed vide"
+[ ] P0.2 — Prototype de capture dnf + Flatpak avec repli en cascade
+[ ] P0.3 — Échantillon de 200 correspondances Repology vérifiées à la main
+[ ] P0.4 — Validation du schéma du manifeste YAML
+
+[PHASE 1 — MVP v0.1 → v0.3] (6-8 semaines)
+MVP v0.1 — même famille Fedora ↔ Fedora + Flatpak
+[ ] F1  — Capture dnf/rpm + apt/dpkg avec repli en cascade + doctor
+[ ] F2  — Capture Flatpak (système/utilisateur, remotes, overrides)
+[ ] F3  — Manifeste YAML avec schéma et validation
+[ ] F4  — Résolveur sur base Repology locale (dnf ↔ apt), statuts et confiance
+[ ] F5  — Plan en terminal et Markdown, édition avant exécution
+[ ] F6  — Exécution dnf, apt, Flatpak, avec journal et reprise
+[ ] F7  — Export des dépôts (/etc/yum.repos.d/, /etc/apt/sources.list*)
+[ ] F8  — Base de correspondance livrée + update-db signé
+[ ] F9  — Archive .tar.zst
+[ ] F10 — Tests automatisés en conteneurs (Fedora, Ubuntu, Debian)
+
+[PHASE 2 — V1 v1.0] (8-12 semaines)
+[ ] F11 — Adaptateurs pacman (+AUR), zypper, Snap
+[ ] F12 — Configs et dotfiles par profils, exclusions de sécurité, backup
+[ ] F13 — Services systemd et tâches cron
+[ ] F14 — Chiffrement de l'archive par phrase de passe
+[ ] F15 — Détection pipx, cargo, npm, AppImage
+[ ] F16 — Assistant interactif pour les cas "ambigu"
+[ ] F17 — Rapport HTML partageable
+[ ] F18 — Système de plugins pour adaptateurs communautaires
+[ ] F19 — Intégration facultative chezmoi / GNU Stow
+
+[PHASE 3 — V2]
+[ ] TUI puis GUI
+[ ] Distributions immuables (Silverblue, Kinoite, Bazzite)
+[ ] Mode flotte
+[ ] Intégrations Ansible / Puppet
+[ ] Service hébergé de synchronisation
+
+[DÉCISIONS EN ATTENTE — PRD §17]
+[ ] Nom "Transpose"/"xpose" validé (GitHub, domaine, marque)
+[ ] Licence code (GPL-3.0 recommandée)
+[ ] Licence données (CC-BY-SA 4.0)
+[ ] Langage confirmé (Go recommandé)
+
+[JOURNAL]
+2026-10-14 — Lecture intégrale du PRD. Création du suivi d'avancement, de la
+structure du dépôt, du module Go 1.22, de la CLI Cobra avec les huit commandes,
+des options globales, de la commande de version, du test de présence des
+commandes et des fichiers de présentation/licence.
+
+Non réalisé : les adaptateurs, la logique métier et le schéma/validation du
+manifeste restent hors du périmètre de cette itération. Build, vet, test et
+vérifications CLI non exécutés : Go n'est pas installé dans l'environnement.
+Le téléchargement temporaire du toolchain a été interrompu car il avançait
+trop lentement ; le fichier partiel a été supprimé. Blocage : absence de Go.
+Prochaine action recommandée : installer Go >= 1.22, puis exécuter
+`go build ./...`, `go vet ./...`, `go test ./...`, construire `./transpose` et
+vérifier `--help`, `capture --help` et `doctor`.
+
+====================================================
+LOGIQUE DE MISE À JOUR :
+- Coche [x] dès qu'une tâche est terminée et vérifiée
+- Ajoute la date de complétion en fin de ligne : "— terminé le AAAA-MM-JJ"
+- Ne coche jamais une tâche non testée
+- Ajoute une section [JOURNAL] en bas pour les notes de session
+====================================================
