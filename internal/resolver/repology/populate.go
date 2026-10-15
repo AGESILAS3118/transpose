@@ -72,26 +72,32 @@ func PopulateWithObserver(
 		if err := ctx.Err(); err != nil {
 			return stats, err
 		}
-		project, meta, err := client.Fetch(ctx, pkg.name)
-		if meta.CacheHit {
-			stats.CacheHits++
-		} else if err == nil {
-			stats.NetworkHits++
-		}
 		progressData := PopulateProgress{
-			Done:        index + 1,
-			Total:       len(packages),
-			SourceName:  pkg.name,
-			CacheHits:   stats.CacheHits,
-			NetworkHits: stats.NetworkHits,
+			Done:       index + 1,
+			Total:      len(packages),
+			SourceName: pkg.name,
 		}
-		if err != nil {
-			stats.NetworkErrors++
-			stats.Warnings = append(stats.Warnings, fmt.Sprintf("%s: %v", pkg.name, err))
-		} else if meta.NotFound {
-			stats.NotFound++
-			stats.Warnings = append(stats.Warnings, fmt.Sprintf("%s: absent de Repology (404)", pkg.name))
-		} else {
+		projectFound := false
+		candidateFound := false
+		sourceErrors := 0
+		for _, projectName := range CandidateProjectNames(pkg.name) {
+			project, meta, err := client.Fetch(ctx, projectName)
+			if meta.CacheHit {
+				stats.CacheHits++
+			} else if err == nil {
+				stats.NetworkHits++
+			}
+			if err != nil {
+				stats.NetworkErrors++
+				sourceErrors++
+				stats.Warnings = append(stats.Warnings, fmt.Sprintf("%s (projet %s): %v", pkg.name, projectName, err))
+				break
+			}
+			if meta.NotFound {
+				stats.NotFound++
+				continue
+			}
+			projectFound = true
 			upstreamURL := ""
 			candidateCount := 0
 			for _, candidate := range project.Packages {
@@ -102,6 +108,10 @@ func PopulateWithObserver(
 					candidateCount++
 				}
 			}
+			if candidateCount == 0 {
+				continue
+			}
+			candidateFound = true
 			inserted, storeErr := StoreProject(ctx, db, project, upstreamURL, targetRepo)
 			if storeErr != nil {
 				stats.NetworkErrors++
@@ -110,6 +120,12 @@ func PopulateWithObserver(
 				stats.StoredPackages += inserted
 				progressData.CandidateCount = candidateCount
 			}
+			break
+		}
+		if !projectFound && sourceErrors == 0 {
+			stats.Warnings = append(stats.Warnings, fmt.Sprintf("%s: aucun projet Repology parmi les noms candidats", pkg.name))
+		} else if projectFound && !candidateFound && sourceErrors == 0 {
+			stats.Warnings = append(stats.Warnings, fmt.Sprintf("%s: aucun candidat %s pour les projets Repology trouvés", pkg.name, targetRepo))
 		}
 		stats.Processed++
 		progressData.CacheHits = stats.CacheHits

@@ -19,6 +19,7 @@ import (
 const (
 	DefaultBaseURL     = "https://repology.org"
 	DefaultRateLimit   = time.Second
+	DefaultTimeout     = 60 * time.Second
 	cacheTTL           = 7 * 24 * time.Hour
 	cacheFormatVersion = 2
 )
@@ -122,13 +123,13 @@ func NewClientWithOptions(options ClientOptions) *Client {
 		options.UserAgent = "xpose/0.1.0-dev (+https://github.com/transpose-project/transpose)"
 	}
 	if options.HTTPClient == nil {
-		options.HTTPClient = &http.Client{Timeout: 30 * time.Second}
+		options.HTTPClient = &http.Client{Timeout: DefaultTimeout}
 	}
 	if options.RateLimit == 0 {
 		options.RateLimit = DefaultRateLimit
 	}
 	if options.RetryBackoff == nil {
-		options.RetryBackoff = []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}
+		options.RetryBackoff = []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}
 	}
 	return &Client{
 		baseURL:      strings.TrimRight(options.BaseURL, "/"),
