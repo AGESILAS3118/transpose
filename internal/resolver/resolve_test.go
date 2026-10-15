@@ -1,0 +1,90 @@
+package resolver
+
+import (
+	"bytes"
+	"context"
+	"encoding/csv"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/transpose-project/transpose/internal/resolver/repology"
+	"github.com/transpose-project/transpose/pkg/manifest"
+)
+
+func TestResolve_ExactMatch(t *testing.T) {
+	result := resolveFixture(t, "htop", []repology.ProjectPackage{{Repo: "debian_13", Name: "htop", Version: "3.4"}})
+	assertResolution(t, result, "exact", "high")
+}
+
+func TestResolve_Equivalent(t *testing.T) {
+	result := resolveFixture(t, "firefox", []repology.ProjectPackage{{Repo: "debian_13", Name: "firefox-esr", Version: "128"}})
+	assertResolution(t, result, "equivalent", "medium")
+}
+
+func TestResolve_Ambiguous(t *testing.T) {
+	result := resolveFixture(t, "python", []repology.ProjectPackage{
+		{Repo: "debian_13", Name: "python3", Version: "3.13"},
+		{Repo: "debian_13", Name: "python3-minimal", Version: "3.13"},
+	})
+	assertResolution(t, result, "ambiguous", "low")
+}
+
+func TestResolve_NotFound(t *testing.T) {
+	result := resolveFixture(t, "unknown", nil)
+	assertResolution(t, result, "not_found", "low")
+}
+
+func TestResolve_CSVFormat(t *testing.T) {
+	var output bytes.Buffer
+	resolutions := []Resolution{{
+		Index: 1, SourceName: "name,with comma", SourceVersion: "1",
+		Status: "not_found", Confidence: "low", Notes: "reason, and detail",
+	}}
+	if err := WriteCSV(&output, resolutions); err != nil {
+		t.Fatal(err)
+	}
+	csvText := output.String()
+	records, err := csv.NewReader(strings.NewReader(csvText)).ReadAll()
+	if err != nil {
+		t.Fatalf("CSV parse error = %v", err)
+	}
+	if !reflect.DeepEqual(records[0], CSVHeader) {
+		t.Errorf("CSV header = %v, want %v", records[0], CSVHeader)
+	}
+	if records[1][1] != resolutions[0].SourceName || records[1][7] != resolutions[0].Notes {
+		t.Errorf("CSV failed to escape commas: %v", records[1])
+	}
+	if !strings.Contains(csvText, `"name,with comma"`) {
+		t.Errorf("CSV output lacks quoting: %s", csvText)
+	}
+}
+
+func resolveFixture(t *testing.T, sourceName string, target []repology.ProjectPackage) Resolution {
+	t.Helper()
+	db, err := repology.OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	project := &repology.Project{Name: sourceName, Packages: target}
+	if _, err := repology.StoreProject(context.Background(), db, project, "https://example.test/upstream", "debian_13"); err != nil {
+		t.Fatal(err)
+	}
+	source := &manifest.Manifest{Packages: []manifest.Package{{Name: sourceName, Manager: "dnf", Version: "1"}}}
+	result, err := ResolveManifest(context.Background(), db, source, "debian_13", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("got %d resolutions, want 1", len(result))
+	}
+	return result[0]
+}
+
+func assertResolution(t *testing.T, result Resolution, status, confidence string) {
+	t.Helper()
+	if result.Status != status || result.Confidence != confidence {
+		t.Errorf("resolution = status %q confidence %q, want %q/%q", result.Status, result.Confidence, status, confidence)
+	}
+}
