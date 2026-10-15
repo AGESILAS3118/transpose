@@ -6,8 +6,17 @@ Dernière mise à jour : 2026-10-15
 [PHASE 0 — VALIDATION] (2 semaines)
 [x] P0.1 — Reproduire et documenter le cas dnf5 "list installed vide" — terminé le 2026-10-15
 [x] P0.2 — Prototype de capture dnf + Flatpak avec repli en cascade — terminé le 2026-10-15
-[ ] P0.3 — Échantillon de 200 correspondances Repology vérifiées à la main
+[x] P0.3 — Échantillon exploratoire de 200 correspondances Repology vérifiées à la main — terminé le 2026-10-15 — base partielle, décision : pipeline CI pour Phase 1
 [x] P0.4 — Validation du schéma du manifeste YAML — terminé le 2026-10-15
+
+[BILAN P0.3]
+- Méthode : API Repology (dump PostgreSQL de 2,46 GB inutilisable en local).
+- Base locale : 493 projets, 140 paquets Debian 13, 116 KiB.
+- Taux de résolution brut initial : 43,5 % (exact + equivalent sur 200, avant correction du classement fuzzy).
+- Précision du résolveur quand il trouve : ~90 %+ selon vérification manuelle ciblée.
+- Cause principale des not_found : couverture incomplète de la base, pas la qualité du résolveur.
+- Bug identifié : un fuzzy match avec un candidat était classé ambiguous ; corrigé.
+- Décision : base de production construite en CI depuis le dump PostgreSQL (Phase 1, F8). L'API ne sera jamais la source de production.
 
 [PHASE 1 — MVP v0.1 → v0.3] (6-8 semaines)
 MVP v0.1 — même famille Fedora ↔ Fedora + Flatpak
@@ -99,10 +108,10 @@ bootstrap dans data/README.md. Décision technique : utiliser l'API uniquement
 pour l'échantillon exploratoire P0.3 ; remplacer ce bootstrap par les dumps
 Repology dans la CI de production (PRD §12).
 
-Échantillon CSV généré : 200 paquets Fedora vers debian_13 (201 lignes avec
-l'en-tête), répartis en 77 exact, 1 equivalent, 3 ambiguous et 119 not_found.
-Le CSV est dans `/tmp/sample-200.csv` et attend la vérification manuelle ;
-P0.3 reste donc non cochée. Une première importation de 502 projets (9 min
+Échantillon CSV généré initialement : 200 paquets Fedora vers debian_13
+(201 lignes avec l'en-tête), répartis en 77 exact, 1 equivalent,
+3 ambiguous et 119 not_found. Le CSV attendait alors la vérification
+manuelle. Une première importation de 502 projets (9 min
 20 s) a révélé un champ de nom Repology différent (`binname`/`visiblename`) ;
 ses enregistrements de noms vides ont été purgés. Après correction, le
 bootstrap réseau a atteint 293/502 en environ 17 min (273 réponses réseau,
@@ -154,12 +163,37 @@ et compilation sans CGO.
 
 Décision technique : API pour l'exploration P0.3 ; dumps Repology à traiter
 en CI pour produire la base de production (PRD §12), après mise au point d'un
-pipeline capable d'importer le dump complet. P0.3 reste en attente de
-vérification manuelle : les statuts `not_found` de cet échantillon ne doivent
-pas être interprétés comme des absences certaines tant que la couverture de
-la base est incomplète. Prochaine action recommandée : vérifier manuellement
-`/tmp/sample-200.csv`, en particulier les correspondances équivalentes et
-ambiguës.
+pipeline capable d'importer le dump complet. Au moment de cet échantillon,
+les statuts `not_found` ne sont pas des absences certaines tant que la
+couverture de la base est incomplète. La vérification manuelle et la clôture
+de P0.3 sont consignées dans l'entrée de journal suivante.
+
+2026-10-15 — Clôture exploratoire P0.3 après vérification manuelle ciblée :
+10/10 exacts corrects ; 7/8 équivalents corrects (les sous-paquets
+NetworkManager-* sont justes, avec NetworkManager-config-connectivity-fedora
+discutable car spécifique à Fedora) ; 4/4 ambiguïtés légitimes hormis le bug
+repéré sur firewall-config → firewalld, auparavant ambiguous avec un seul
+candidat. Environ 6/10 not_found examinés sont des faux négatifs confirmés
+(asciiquarium, fuse, bluez-cups, grub2-efi-x64, fprintd-pam et
+alsa-sof-firmware). Précision observée : ~90 %+ quand le résolveur trouve ;
+la limitation principale est la couverture, pas le classement.
+
+Le fuzzy fallback classe désormais un unique candidat en equivalent avec la
+note « fuzzy match ». La commande `resolve --report` produit un rapport
+Markdown avec résumé, listes par statut, limite explicite de la base et
+résultats de la vérification humaine. P0.3 est clôturée comme expérience, sans
+présenter la base partielle comme exhaustive. Pour Phase 1, priorité au jalon
+Fedora ↔ Fedora avec Flatpak ; le cross-family attend la base générée en CI à
+partir du dump Repology (F8), l'API restant hors de la source de production.
+Prochaine action : créer les issues F1 à F10 d'après
+`docs/PLAN-PHASE-1.md`.
+
+Vérification finale après correction : `resolve --report` a généré
+`/tmp/rapport-p03.md` et le CSV a été régénéré. Avec le fuzzy match unique
+reclassé en equivalent, le nouvel échantillon compte 79 exact, 9 equivalent,
+3 ambiguous et 109 not_found (44,0 % exact + equivalent). Le rapport précise
+que les mesures de précision manuelle citées portent sur le CSV initial.
+`gofmt`, build, vet et les 64 tests passent.
 
 ====================================================
 LOGIQUE DE MISE À JOUR :
