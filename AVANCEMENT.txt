@@ -137,7 +137,10 @@ diagnostic `resolve --explain NetworkManager-adsl` trouve
 complet reste partiel : 493 projets connus dans la base, 140 paquets Debian
 13 enregistrés, aucun nom de paquet vide ; base SQLite de 116 KiB. Le
 bootstrap complet des 502 paquets n'a pas été achevé, donc les absences ne
-sont pas toutes des absences confirmées de Debian.
+sont pas toutes des absences confirmées de Debian. Durée : aucun bootstrap
+complet réussi à chronométrer ; une tentative API a atteint 293/502 en
+environ 17 min avant arrêt, et un lot cache/API de 200 projets a inséré
+100 paquets en 23 s.
 
 Échantillon régénéré après le resserrage fuzzy : `/tmp/sample-200.csv`,
 200 paquets (201 lignes avec en-tête) : 79 exact, 8 equivalent,
