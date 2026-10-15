@@ -92,7 +92,7 @@ func TestResolve_FuzzyFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	for _, target := range []string{"htop", "hstop", "http"} {
+	for _, target := range []string{"htop", "htopa", "htopb"} {
 		project := &repology.Project{
 			Name: target,
 			Packages: []repology.ProjectPackage{{
@@ -110,6 +110,36 @@ func TestResolve_FuzzyFallback(t *testing.T) {
 	}
 	if len(results) != 1 || results[0].Status != "ambiguous" || results[0].Confidence != "low" {
 		t.Fatalf("resolution = %#v, want fuzzy ambiguous result", results)
+	}
+}
+
+func TestResolve_FuzzySingleCandidateIsEquivalent(t *testing.T) {
+	db, err := repology.OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	project := &repology.Project{
+		Name: "htop",
+		Packages: []repology.ProjectPackage{{
+			Repo: "debian_13", Name: "htop", Version: "3.4",
+		}},
+	}
+	if _, err := repology.StoreProject(context.Background(), db, project, "", "debian_13"); err != nil {
+		t.Fatal(err)
+	}
+	source := &manifest.Manifest{Packages: []manifest.Package{{Name: "htopx", Manager: "dnf"}}}
+	results, err := ResolveManifest(context.Background(), db, source, "debian_13", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("got %d resolutions, want 1", len(results))
+	}
+	result := results[0]
+	if result.Status != "equivalent" || result.Confidence != "medium" ||
+		!strings.Contains(result.Notes, "fuzzy match") {
+		t.Fatalf("resolution = %#v, want one fuzzy equivalent", result)
 	}
 }
 

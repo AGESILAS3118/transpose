@@ -14,15 +14,16 @@ import (
 )
 
 type Resolution struct {
-	Index         int
-	SourceName    string
-	SourceVersion string
-	TargetName    string
-	TargetVersion string
-	Status        string
-	Confidence    string
-	Notes         string
-	ProjectNames  []string
+	Index            int
+	SourceName       string
+	SourceVersion    string
+	TargetName       string
+	TargetVersion    string
+	Status           string
+	Confidence       string
+	Notes            string
+	ProjectNames     []string
+	TargetCandidates []string
 }
 
 var CSVHeader = []string{
@@ -63,11 +64,20 @@ func ResolveManifest(ctx context.Context, db *sql.DB, source *manifest.Manifest,
 			}
 			if len(fuzzy) > 0 {
 				candidates = fuzzy
-				resolution.Status = "ambiguous"
-				resolution.Confidence = "low"
-				resolution.Notes = fmt.Sprintf("%d candidats fuzzy (recherche approximative)", len(fuzzy))
 				resolution.TargetName = fuzzy[0].Name
 				resolution.TargetVersion = fuzzy[0].Version
+				for _, candidate := range fuzzy {
+					resolution.TargetCandidates = append(resolution.TargetCandidates, candidate.Name)
+				}
+				if len(fuzzy) == 1 {
+					resolution.Status = "equivalent"
+					resolution.Confidence = "medium"
+					resolution.Notes = "fuzzy match; 1 candidat (recherche approximative)"
+				} else {
+					resolution.Status = "ambiguous"
+					resolution.Confidence = "low"
+					resolution.Notes = fmt.Sprintf("%d candidats fuzzy (recherche approximative)", len(fuzzy))
+				}
 			} else {
 				resolution.Status = "not_found"
 				resolution.Confidence = "low"
@@ -80,6 +90,7 @@ func ResolveManifest(ctx context.Context, db *sql.DB, source *manifest.Manifest,
 		case 1:
 			resolution.TargetName = candidates[0].Name
 			resolution.TargetVersion = candidates[0].Version
+			resolution.TargetCandidates = []string{candidates[0].Name}
 			if strings.EqualFold(sourcePackage.Name, candidates[0].Name) {
 				resolution.Status = "exact"
 				resolution.Confidence = "high"
@@ -101,6 +112,9 @@ func ResolveManifest(ctx context.Context, db *sql.DB, source *manifest.Manifest,
 			resolution.Status = "ambiguous"
 			resolution.Confidence = "low"
 			resolution.Notes = fmt.Sprintf("%d candidats", len(candidates))
+			for _, candidate := range candidates {
+				resolution.TargetCandidates = append(resolution.TargetCandidates, candidate.Name)
+			}
 			if upstreamURL != "" {
 				resolution.Notes += "; upstream: " + upstreamURL
 			}
