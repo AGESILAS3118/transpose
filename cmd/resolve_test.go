@@ -34,8 +34,9 @@ func TestResolveCommand_OutputCSV(t *testing.T) {
 	}
 	manifestPath := writeCommandManifest(t, []manifest.Package{{Name: "htop", Manager: "dnf", Version: "3.3.0"}})
 	outputPath := filepath.Join(t.TempDir(), "sample.csv")
+	reportPath := filepath.Join(t.TempDir(), "report.md")
 	root := commandRoot(newResolveCmdWithDBPath(dbPath))
-	root.SetArgs([]string{"resolve", "--from-manifest", manifestPath, "--target", "debian_13", "--output", outputPath})
+	root.SetArgs([]string{"resolve", "--from-manifest", manifestPath, "--target", "debian_13", "--output", outputPath, "--report", reportPath})
 	var stdout bytes.Buffer
 	root.SetOut(&stdout)
 	if err := root.Execute(); err != nil {
@@ -52,6 +53,40 @@ func TestResolveCommand_OutputCSV(t *testing.T) {
 	wantHeader := []string{"index", "source_name", "source_version", "target_name", "target_version", "status", "confidence", "notes"}
 	if !reflect.DeepEqual(records[0], wantHeader) || len(records) != 2 || records[1][5] != "exact" {
 		t.Errorf("CSV records = %#v", records)
+	}
+	report, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"# Rapport de résolution Fedora → Debian", "Cible : debian_13", "| exact | 1 | 100,0 % |"} {
+		if !strings.Contains(string(report), expected) {
+			t.Errorf("report %q does not contain %q", report, expected)
+		}
+	}
+}
+
+func TestResolveCommand_ReportWithoutCSV(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "repology.db")
+	db, err := repology.OpenDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := writeCommandManifest(t, []manifest.Package{{Name: "missing", Manager: "dnf"}})
+	reportPath := filepath.Join(t.TempDir(), "nested", "report.md")
+	root := commandRoot(newResolveCmdWithDBPath(dbPath))
+	root.SetArgs([]string{"resolve", "--from-manifest", manifestPath, "--report", reportPath})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("resolve --report error = %v", err)
+	}
+	report, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(report), "## Non trouvés (échantillon 20 premiers)") {
+		t.Errorf("report missing not-found section: %s", report)
 	}
 }
 

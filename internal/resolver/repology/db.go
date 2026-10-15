@@ -144,6 +144,14 @@ func CountPackages(ctx context.Context, db *sql.DB) (int, error) {
 	return count, nil
 }
 
+func CountPackagesInRepo(ctx context.Context, db *sql.DB, repo string) (int, error) {
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM packages WHERE repo = ?", repo).Scan(&count); err != nil {
+		return 0, fmt.Errorf("comptage paquets Repology du dépôt %q: %w", repo, err)
+	}
+	return count, nil
+}
+
 func SearchPackages(ctx context.Context, db *sql.DB, targetRepo string, terms []string, limit int) ([]StoredPackage, error) {
 	if limit <= 0 {
 		return nil, errors.New("limite de recherche fuzzy doit être positif")

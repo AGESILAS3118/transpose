@@ -3,9 +3,11 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/transpose-project/transpose/internal/resolver"
@@ -89,8 +91,12 @@ func newResolveCmdWithDBPath(dbPath string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if outputPath == "" {
-				return fmt.Errorf("--output est obligatoire")
+			reportPath, err := cmd.Flags().GetString("report")
+			if err != nil {
+				return err
+			}
+			if outputPath == "" && reportPath == "" {
+				return fmt.Errorf("--output ou --report est requis")
 			}
 			if dbPath == "" {
 				return fmt.Errorf("chemin de base Repology indisponible")
@@ -108,21 +114,35 @@ func newResolveCmdWithDBPath(dbPath string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if parent := filepath.Dir(outputPath); parent != "." {
-				if err := os.MkdirAll(parent, 0o755); err != nil {
-					return fmt.Errorf("création dossier de sortie %s: %w", parent, err)
+			if outputPath != "" {
+				if err := writeResolveFile(outputPath, func(writer io.Writer) error {
+					return resolver.WriteCSV(writer, resolutions)
+				}); err != nil {
+					return fmt.Errorf("écriture CSV %s: %w", outputPath, err)
 				}
+				fmt.Fprintf(cmd.OutOrStdout(), "%d lignes écrites dans %s\n", len(resolutions), outputPath)
 			}
-			file, err := os.Create(outputPath)
-			if err != nil {
-				return fmt.Errorf("création CSV %s: %w", outputPath, err)
+			if reportPath != "" {
+				targetCount, err := repology.CountPackagesInRepo(cmd.Context(), db, targetRepo)
+				if err != nil {
+					return err
+				}
+				report := resolver.MarkdownReport{
+					SourceManifest:       filepath.Base(manifestPath),
+					SourcePackageCount:   len(source.Packages),
+					TargetRepo:           targetRepo,
+					Date:                 time.Now().Format("2006-01-02"),
+					SampleCount:          len(resolutions),
+					DatabasePackageCount: targetCount,
+					Resolutions:          resolutions,
+				}
+				if err := writeResolveFile(reportPath, func(writer io.Writer) error {
+					return resolver.WriteMarkdownReport(writer, report)
+				}); err != nil {
+					return fmt.Errorf("écriture rapport %s: %w", reportPath, err)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Rapport écrit dans %s\n", reportPath)
 			}
-			writeErr := resolver.WriteCSV(file, resolutions)
-			closeErr := file.Close()
-			if writeErr != nil || closeErr != nil {
-				return fmt.Errorf("écriture CSV %s: %w", outputPath, errors.Join(writeErr, closeErr))
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%d lignes écrites dans %s\n", len(resolutions), outputPath)
 			return nil
 		},
 	}
@@ -131,5 +151,24 @@ func newResolveCmdWithDBPath(dbPath string) *cobra.Command {
 	command.Flags().Int("sample", 0, "Limit the output to the first N source packages (0 means all)")
 	command.Flags().String("output", "", "Required CSV output path")
 	command.Flags().String("explain", "", "Explain resolution for one source package")
+	command.Flags().String("report", "", "Write a human-readable Markdown report")
 	return command
+}
+
+func writeResolveFile(path string, write func(io.Writer) error) error {
+	if parent := filepath.Dir(path); parent != "." {
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			return fmt.Errorf("création dossier de sortie %s: %w", parent, err)
+		}
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("création fichier: %w", err)
+	}
+	writeErr := write(file)
+	closeErr := file.Close()
+	if writeErr != nil || closeErr != nil {
+		return errors.Join(writeErr, closeErr)
+	}
+	return nil
 }
