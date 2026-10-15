@@ -121,6 +121,43 @@ les projets traités avant l'arrêt réseau. Prochaine action recommandée :
 vérification manuelle de `/tmp/sample-200.csv` par l'utilisateur, puis
 reprendre l'import des projets restants si nécessaire.
 
+2026-10-15 — Fiabilisation P0.3 : le catalogue des dumps Repology ne propose
+pas de dump filtré par dépôt. Le dump SQL PostgreSQL complet annoncé est
+d'environ 2,46 Go compressé, requiert PostgreSQL et ses extensions Repology ;
+il n'a pas été téléchargé ni restauré. Repli sur l'API avec keep-alive,
+timeout de 60 s et jusqu'à cinq tentatives exponentielles, en conservant la
+limite d'une requête/s. L'import local accepte des dumps JSONL filtrés, mais
+ce n'est pas un import direct du dump SQL officiel.
+
+La résolution essaie désormais des noms candidats (exact, normalisés,
+minuscules), y compris les suffixes de sous-paquets, `lib*` et `python3-*`,
+puis une recherche fuzzy par distance de Levenshtein à seuil resserré. Le
+diagnostic `resolve --explain NetworkManager-adsl` trouve
+`network-manager` via le projet Repology `networkmanager`. L'import API
+complet reste partiel : 493 projets connus dans la base, 140 paquets Debian
+13 enregistrés, aucun nom de paquet vide ; base SQLite de 116 KiB. Le
+bootstrap complet des 502 paquets n'a pas été achevé, donc les absences ne
+sont pas toutes des absences confirmées de Debian.
+
+Échantillon régénéré après le resserrage fuzzy : `/tmp/sample-200.csv`,
+200 paquets (201 lignes avec en-tête) : 79 exact, 8 equivalent,
+4 ambiguous et 109 not_found. La recherche normalisée permet notamment de
+rapprocher les sous-paquets NetworkManager ; le seuil fuzzy plus strict a
+réduit les ambiguïtés de l'échantillon de 8 à 4. Limites observées : paquets
+spécifiques à Fedora, firmware, composants découpés différemment, écarts de
+versions entre dépôts, couverture API interrompue et rapprochements fuzzy
+qui restent indicatifs. Tous les 62 tests Go passent, ainsi que build, vet
+et compilation sans CGO.
+
+Décision technique : API pour l'exploration P0.3 ; dumps Repology à traiter
+en CI pour produire la base de production (PRD §12), après mise au point d'un
+pipeline capable d'importer le dump complet. P0.3 reste en attente de
+vérification manuelle : les statuts `not_found` de cet échantillon ne doivent
+pas être interprétés comme des absences certaines tant que la couverture de
+la base est incomplète. Prochaine action recommandée : vérifier manuellement
+`/tmp/sample-200.csv`, en particulier les correspondances équivalentes et
+ambiguës.
+
 ====================================================
 LOGIQUE DE MISE À JOUR :
 - Coche [x] dès qu'une tâche est terminée et vérifiée

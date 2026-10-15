@@ -27,9 +27,37 @@ without network access with `update-db --offline`. The database is stored at
 Repology data is licensed under **CC-BY-SA 4.0**. Attribution is required for
 redistribution of this database or a derived database.
 
+## Repology dumps
+
+The official `dumps.repology.org` index currently publishes complete PostgreSQL
+SQL dumps, not a filtered `debian_13` export. The latest dump observed for this
+prototype was about 2.46 GB compressed; Repology documents more than 10 GB of
+database space after restoration and requires the matching PostgreSQL major
+version plus Repology-specific extensions. It is not a directly importable
+filtered input for this local SQLite prototype. `update-db --dump` and
+`--from-url` accept filtered JSON Lines records with `project_name`, `repo`,
+`name`, `version`, and optional upstream metadata; `--from-url` resumes with
+`curl -C -`.
+
 ## Production data pipeline
 
-This API-backed workflow is only a Phase 0 bootstrap and quality-measurement
-tool. Production database releases will be generated in CI from Repology data
-dumps, validated and versioned there; users will consume the local database
-without querying the public API.
+The API-backed workflow is only a Phase 0 bootstrap and quality-measurement
+tool. In production, CI should provision the PostgreSQL version and extensions
+documented by Repology, import the full upstream dump, export the target
+repository joined to its Repology `project_name`, then build, validate,
+attribute (CC-BY-SA 4.0), and publish the versioned local SQLite database.
+Users will consume that database without querying the public API.
+
+## P0.3 limitations observed
+
+Fedora package names are not consistently Repology project names. Subpackages
+such as `NetworkManager-adsl`, `foo-devel`, and `python3-foo` need
+normalization before lookup. Fedora-specific firmware, release/configuration
+packages, and versioned desktop components may have no Debian 13 project. API
+response records also use `binname` / `visiblename`, not always `name`;
+importing only the latter caused false negatives.
+
+For Phase 1, enable exact project lookup followed by tested subpackage
+normalization aliases, and only then a low-confidence fuzzy search that yields
+ambiguous suggestions rather than silently claiming an equivalent package.
+Graphical applications should later gain AppStream project/upstream mappings.
