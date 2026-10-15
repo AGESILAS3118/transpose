@@ -92,6 +92,35 @@ configs et binaires non gérés restent vides ; pas de résolveur, plan ni
 exécuteur. Aucun blocage pour cette phase. Prochaine action recommandée :
 P0.3, échantillon des 200 correspondances Repology vérifiées manuellement.
 
+2026-10-15 — Prototype P0.3 implémenté : client API Repology avec User-Agent,
+limitation à 1 requête/s, retries exponentiels, cache local de 7 jours,
+base SQLite pure-Go, commandes `update-db` et `resolve`, et documentation de
+bootstrap dans data/README.md. Décision technique : utiliser l'API uniquement
+pour l'échantillon exploratoire P0.3 ; remplacer ce bootstrap par les dumps
+Repology dans la CI de production (PRD §12).
+
+Échantillon CSV généré : 200 paquets Fedora vers debian_13 (201 lignes avec
+l'en-tête), répartis en 77 exact, 1 equivalent, 3 ambiguous et 119 not_found.
+Le CSV est dans `/tmp/sample-200.csv` et attend la vérification manuelle ;
+P0.3 reste donc non cochée. Une première importation de 502 projets (9 min
+20 s) a révélé un champ de nom Repology différent (`binname`/`visiblename`) ;
+ses enregistrements de noms vides ont été purgés. Après correction, le
+bootstrap réseau a atteint 293/502 en environ 17 min (273 réponses réseau,
+13 réponses cache, 7 erreurs réseau/réponse lente) avant arrêt pour éviter
+d'insister sur les délais croissants. Un lot de contrôle hors ligne de 50
+projets a réussi en 9 s, avec 14 candidats ajoutés, 0 404 et 0 erreur.
+Base locale : 490 projets conservés, 137 candidats non vides, 0 nom vide,
+116 KiB. Aucun 404 Repology observé ; de nombreux projets n'ont aucun candidat
+dans Debian 13, et quelques requêtes tardives ont subi des timeouts/retries.
+
+Fonctionne : API et cache, import idempotent, résolution CSV et tests de
+classification/échappement ; les 38 tests passent, y compris la compilation
+avec `CGO_ENABLED=0`. Limite : la base ne contient pas encore de données
+fraîches pour les 502 projets ; le CSV des 200 premiers a été construit avec
+les projets traités avant l'arrêt réseau. Prochaine action recommandée :
+vérification manuelle de `/tmp/sample-200.csv` par l'utilisateur, puis
+reprendre l'import des projets restants si nécessaire.
+
 ====================================================
 LOGIQUE DE MISE À JOUR :
 - Coche [x] dès qu'une tâche est terminée et vérifiée
