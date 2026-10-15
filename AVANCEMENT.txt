@@ -7,7 +7,7 @@ Dernière mise à jour : 2026-10-15
 [x] P0.1 — Reproduire et documenter le cas dnf5 "list installed vide" — terminé le 2026-10-15
 [x] P0.2 — Prototype de capture dnf + Flatpak avec repli en cascade — terminé le 2026-10-15
 [ ] P0.3 — Échantillon de 200 correspondances Repology vérifiées à la main
-[ ] P0.4 — Validation du schéma du manifeste YAML
+[x] P0.4 — Validation du schéma du manifeste YAML — terminé le 2026-10-15
 
 [PHASE 1 — MVP v0.1 → v0.3] (6-8 semaines)
 MVP v0.1 — même famille Fedora ↔ Fedora + Flatpak
@@ -76,6 +76,21 @@ une vraie base DNF ; il requiert sqlite3 et la disponibilité de la table rpm
 dans history.sqlite. Pas de blocage pour build, vet ou tests. Prochaine action
 recommandée : valider ce dernier recours sur une base DNF dédiée, puis reprendre
 P0.3 (échantillon des correspondances Repology).
+
+2026-10-15 — Schéma YAML versionné (schema: 1) publié dans pkg/manifest,
+avec lecture/écriture, validation, avertissement sur les chaînes ressemblant
+à des secrets et préservation des champs inconnus. Tests round-trip et champs
+inconnus validés. BuildManifest convertit les captures dnf/Flatpak et les
+métadonnées système ; `capture` produit YAML par défaut, JSON, dump brut avec
+`--format raw`, et accepte `-o`, `--only` et `--exclude`. Exemple réel produit :
+Fedora 44, amd64, capture dnf (502 paquets) et Flatpak (6 apps, 2 remotes) ;
+les divergences Flatpak vont sur stderr, pas dans le manifeste.
+
+Fonctionne : `gofmt`, build, vet et les 24 tests passent ; le YAML réel se relit
+et se valide. Non réalisé : dépôts, snaps, paquets de langages, services, cron,
+configs et binaires non gérés restent vides ; pas de résolveur, plan ni
+exécuteur. Aucun blocage pour cette phase. Prochaine action recommandée :
+P0.3, échantillon des 200 correspondances Repology vérifiées manuellement.
 
 ====================================================
 LOGIQUE DE MISE À JOUR :
