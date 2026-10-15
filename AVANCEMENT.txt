@@ -1,11 +1,11 @@
 ====================================================
 TRANSPOSE — SUIVI D'AVANCEMENT
-Dernière mise à jour : 2026-10-14
+Dernière mise à jour : 2026-10-15
 ====================================================
 
 [PHASE 0 — VALIDATION] (2 semaines)
-[ ] P0.1 — Reproduire et documenter le cas dnf5 "list installed vide"
-[ ] P0.2 — Prototype de capture dnf + Flatpak avec repli en cascade
+[x] P0.1 — Reproduire et documenter le cas dnf5 "list installed vide" — terminé le 2026-10-15
+[x] P0.2 — Prototype de capture dnf + Flatpak avec repli en cascade — terminé le 2026-10-15
 [ ] P0.3 — Échantillon de 200 correspondances Repology vérifiées à la main
 [ ] P0.4 — Validation du schéma du manifeste YAML
 
@@ -60,6 +60,22 @@ trop lentement ; le fichier partiel a été supprimé. Blocage : absence de Go.
 Prochaine action recommandée : installer Go >= 1.22, puis exécuter
 `go build ./...`, `go vet ./...`, `go test ./...`, construire `./transpose` et
 vérifier `--help`, `capture --help` et `doctor`.
+
+2026-10-15 — Prototype Phase 0 réalisé et vérifié avec Go 1.23.4. Fonctionne :
+interface commune et runner injectable ; capture dnf en niveaux 1/2/3,
+détection de l'incohérence par doctor, capture Flatpak avec repli sur les
+répertoires et avertissements de divergence des portées ; sortie JSON de
+capture et commande doctor. Build et vet passent, gofmt ne signale aucun
+fichier, et les 13 tests unitaires passent, dont les scénarios d'incohérence
+simulés par mocks. Vérification locale : doctor voit dnf fonctionnel (502
+éléments), Flatpak fonctionnel (6 apps) et apt absent ; capture dnf niveau 1
+(502 paquets) et Flatpak niveau 1 (6 apps, 2 remotes).
+
+Ne fonctionne pas / non vérifié : le repli dnf niveau 3 n'a pas été exercé sur
+une vraie base DNF ; il requiert sqlite3 et la disponibilité de la table rpm
+dans history.sqlite. Pas de blocage pour build, vet ou tests. Prochaine action
+recommandée : valider ce dernier recours sur une base DNF dédiée, puis reprendre
+P0.3 (échantillon des correspondances Repology).
 
 ====================================================
 LOGIQUE DE MISE À JOUR :
