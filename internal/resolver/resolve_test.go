@@ -35,6 +35,84 @@ func TestResolve_NotFound(t *testing.T) {
 	assertResolution(t, result, "not_found", "low")
 }
 
+func TestResolve_SubpackageUsesNormalizedProject(t *testing.T) {
+	db, err := repology.OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	project := &repology.Project{
+		Name: "NetworkManager",
+		Packages: []repology.ProjectPackage{{
+			Repo: "debian_13", Name: "network-manager", Version: "1.44",
+		}},
+	}
+	if _, err := repology.StoreProject(context.Background(), db, project, "https://networkmanager.dev", "debian_13"); err != nil {
+		t.Fatal(err)
+	}
+	source := &manifest.Manifest{Packages: []manifest.Package{{Name: "NetworkManager-adsl", Manager: "dnf"}}}
+	results, err := ResolveManifest(context.Background(), db, source, "debian_13", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].TargetName != "network-manager" ||
+		results[0].Status != "equivalent" || results[0].Confidence != "medium" {
+		t.Fatalf("resolution = %#v", results)
+	}
+}
+
+func TestResolve_SubpackageSuffixUsesBaseProject(t *testing.T) {
+	db, err := repology.OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	project := &repology.Project{
+		Name: "foo",
+		Packages: []repology.ProjectPackage{{
+			Repo: "debian_13", Name: "foo", Version: "1",
+		}},
+	}
+	if _, err := repology.StoreProject(context.Background(), db, project, "", "debian_13"); err != nil {
+		t.Fatal(err)
+	}
+	source := &manifest.Manifest{Packages: []manifest.Package{{Name: "foo-devel", Manager: "dnf"}}}
+	results, err := ResolveManifest(context.Background(), db, source, "debian_13", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Status != "equivalent" || results[0].TargetName != "foo" {
+		t.Fatalf("resolution = %#v", results)
+	}
+}
+
+func TestResolve_FuzzyFallback(t *testing.T) {
+	db, err := repology.OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, target := range []string{"htop", "hstop", "http"} {
+		project := &repology.Project{
+			Name: target,
+			Packages: []repology.ProjectPackage{{
+				Repo: "debian_13", Name: target, Version: "1",
+			}},
+		}
+		if _, err := repology.StoreProject(context.Background(), db, project, "", "debian_13"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	source := &manifest.Manifest{Packages: []manifest.Package{{Name: "htopx", Manager: "dnf"}}}
+	results, err := ResolveManifest(context.Background(), db, source, "debian_13", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Status != "ambiguous" || results[0].Confidence != "low" {
+		t.Fatalf("resolution = %#v, want fuzzy ambiguous result", results)
+	}
+}
+
 func TestResolve_CSVFormat(t *testing.T) {
 	var output bytes.Buffer
 	resolutions := []Resolution{{

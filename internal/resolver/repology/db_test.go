@@ -2,7 +2,14 @@ package repology
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/transpose-project/transpose/pkg/manifest"
 )
 
 func TestDB_InsertIdempotent(t *testing.T) {
@@ -53,5 +60,51 @@ func TestDB_QueryByProject(t *testing.T) {
 	}
 	if upstream != "https://mozilla.org" || len(packages) != 1 || packages[0].Name != "firefox-esr" {
 		t.Errorf("QueryByProject() = %#v, upstream %q", packages, upstream)
+	}
+}
+
+func TestPopulate_UsesNormalizedProjectCandidate(t *testing.T) {
+	db, err := OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/project/NetworkManager-adsl" {
+			fmt.Fprintln(w, `[]`)
+			return
+		}
+		if r.URL.Path != "/api/v1/project/NetworkManager" {
+			http.NotFound(w, r)
+			return
+		}
+		json.NewEncoder(w).Encode([]map[string]string{{
+			"repo": "debian_13", "binname": "network-manager", "version": "1.52.1",
+		}})
+	}))
+	defer server.Close()
+	client := NewClientWithOptions(ClientOptions{
+		BaseURL:      server.URL,
+		CacheDir:     t.TempDir(),
+		HTTPClient:   server.Client(),
+		RateLimit:    time.Millisecond,
+		RetryBackoff: []time.Duration{},
+	})
+	source := &manifest.Manifest{Packages: []manifest.Package{
+		{Name: "NetworkManager-adsl", Manager: "dnf"},
+	}}
+	stats, err := PopulateWithObserver(context.Background(), db, client, source, "debian_13", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Processed != 1 || stats.StoredPackages != 1 || stats.NotFound != 0 {
+		t.Errorf("stats = %#v", stats)
+	}
+	packages, _, err := QueryByProject(context.Background(), db, "NetworkManager", "debian_13")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(packages) != 1 || packages[0].Name != "network-manager" {
+		t.Errorf("normalized project packages = %#v", packages)
 	}
 }

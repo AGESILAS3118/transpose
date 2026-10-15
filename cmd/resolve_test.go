@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/transpose-project/transpose/internal/resolver/repology"
@@ -92,6 +93,38 @@ func TestResolveCommand_SampleLimit(t *testing.T) {
 	}
 	if len(records) != 3 {
 		t.Errorf("got %d CSV rows including header, want 3", len(records))
+	}
+}
+
+func TestResolveCommand_ExplainNormalizedProject(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "repology.db")
+	db, err := repology.OpenDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := &repology.Project{
+		Name: "NetworkManager",
+		Packages: []repology.ProjectPackage{{
+			Repo: "debian_13", Name: "network-manager", Version: "1.44",
+		}},
+	}
+	if _, err := repology.StoreProject(context.Background(), db, project, "", "debian_13"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	root := commandRoot(newResolveCmdWithDBPath(dbPath))
+	root.SetArgs([]string{"resolve", "--explain", "NetworkManager-adsl"})
+	var output bytes.Buffer
+	root.SetOut(&output)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("resolve --explain error = %v", err)
+	}
+	for _, expected := range []string{"NetworkManager-adsl", "NetworkManager", "networkmanager", "network-manager", "equivalent", "medium"} {
+		if !strings.Contains(output.String(), expected) {
+			t.Errorf("explain output %q does not contain %q", output.String(), expected)
+		}
 	}
 }
 
