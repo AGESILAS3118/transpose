@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/transpose-project/transpose/internal/resolver/repology"
@@ -21,6 +22,7 @@ type Resolution struct {
 	Status        string
 	Confidence    string
 	Notes         string
+	ProjectNames  []string
 }
 
 var CSVHeader = []string{
@@ -43,24 +45,38 @@ func ResolveManifest(ctx context.Context, db *sql.DB, source *manifest.Manifest,
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		candidates, upstreamURL, err := repology.QueryByProject(ctx, db, sourcePackage.Name, targetRepo)
-		if err != nil {
-			return nil, err
-		}
 		resolution := Resolution{
 			Index:         index + 1,
 			SourceName:    sourcePackage.Name,
 			SourceVersion: sourcePackage.Version,
 		}
+		candidates, upstreamURL, matchedProject, err := queryCandidateNames(ctx, db, sourcePackage.Name, targetRepo)
+		if err != nil {
+			return nil, err
+		}
+		resolution.ProjectNames = CandidateNames(sourcePackage.Name)
 		switch len(candidates) {
 		case 0:
-			resolution.Status = "not_found"
-			resolution.Confidence = "low"
-			resolution.Notes = "0 candidats"
-			if upstreamURL != "" {
-				resolution.Notes += "; upstream: " + upstreamURL
+			fuzzy, fuzzyErr := repology.SearchPackages(ctx, db, targetRepo, fuzzySearchTerms(sourcePackage.Name), 3)
+			if fuzzyErr != nil {
+				return nil, fuzzyErr
 			}
-			resolution.Notes += "; aucun paquet cible pour le project_name"
+			if len(fuzzy) > 0 {
+				candidates = fuzzy
+				resolution.Status = "ambiguous"
+				resolution.Confidence = "low"
+				resolution.Notes = fmt.Sprintf("%d candidats fuzzy (recherche approximative)", len(fuzzy))
+				resolution.TargetName = fuzzy[0].Name
+				resolution.TargetVersion = fuzzy[0].Version
+			} else {
+				resolution.Status = "not_found"
+				resolution.Confidence = "low"
+				resolution.Notes = "0 candidats"
+				if upstreamURL != "" {
+					resolution.Notes += "; upstream: " + upstreamURL
+				}
+				resolution.Notes += "; aucun paquet cible pour les project_name candidats"
+			}
 		case 1:
 			resolution.TargetName = candidates[0].Name
 			resolution.TargetVersion = candidates[0].Version
@@ -78,6 +94,9 @@ func ResolveManifest(ctx context.Context, db *sql.DB, source *manifest.Manifest,
 			if upstreamURL != "" {
 				resolution.Notes += "; upstream: " + upstreamURL
 			}
+			if !strings.EqualFold(matchedProject, sourcePackage.Name) {
+				resolution.Notes += "; project_name: " + matchedProject
+			}
 		default:
 			resolution.Status = "ambiguous"
 			resolution.Confidence = "low"
@@ -89,6 +108,34 @@ func ResolveManifest(ctx context.Context, db *sql.DB, source *manifest.Manifest,
 		resolutions = append(resolutions, resolution)
 	}
 	return resolutions, nil
+}
+
+func queryCandidateNames(ctx context.Context, db *sql.DB, sourceName, targetRepo string) ([]repology.StoredPackage, string, string, error) {
+	names := CandidateNames(sourceName)
+	for _, name := range names {
+		candidates, upstreamURL, err := repology.QueryByProject(ctx, db, name, targetRepo)
+		if err != nil {
+			return nil, "", "", err
+		}
+		if len(candidates) > 0 {
+			return candidates, upstreamURL, name, nil
+		}
+	}
+	return nil, "", "", nil
+}
+
+func fuzzySearchTerms(source string) []string {
+	names := CandidateNames(source)
+	terms := make([]string, 0, len(names))
+	for _, name := range names {
+		if len(name) >= 3 {
+			terms = append(terms, name)
+		}
+	}
+	sort.SliceStable(terms, func(i, j int) bool {
+		return len(terms[i]) > len(terms[j])
+	})
+	return terms
 }
 
 func WriteCSV(writer io.Writer, resolutions []Resolution) error {

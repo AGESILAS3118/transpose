@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -19,6 +21,11 @@ type StoredPackage struct {
 	Category    string
 	Maintainer  string
 	UpstreamURL string
+}
+
+type rankedPackage struct {
+	pkg      StoredPackage
+	distance int
 }
 
 func OpenDB(path string) (*sql.DB, error) {
@@ -135,4 +142,134 @@ func CountPackages(ctx context.Context, db *sql.DB) (int, error) {
 		return 0, fmt.Errorf("comptage base Repology: %w", err)
 	}
 	return count, nil
+}
+
+func SearchPackages(ctx context.Context, db *sql.DB, targetRepo string, terms []string, limit int) ([]StoredPackage, error) {
+	if limit <= 0 {
+		return nil, errors.New("limite de recherche fuzzy doit être positif")
+	}
+	ranked := make(map[string]rankedPackage)
+	for _, term := range terms {
+		term = strings.TrimSpace(term)
+		if len(term) < 3 {
+			continue
+		}
+		for _, gram := range searchGrams(term) {
+			rows, err := db.QueryContext(ctx, `
+				SELECT project_name, repo, name, version, category, maintainer
+				FROM packages
+				WHERE repo = ? AND name LIKE ? ESCAPE '\'
+				LIMIT 500
+			`, targetRepo, "%"+escapeLike(gram)+"%")
+			if err != nil {
+				return nil, fmt.Errorf("recherche fuzzy %q: %w", gram, err)
+			}
+			for rows.Next() {
+				var pkg StoredPackage
+				if err := rows.Scan(&pkg.ProjectName, &pkg.Repo, &pkg.Name, &pkg.Version, &pkg.Category, &pkg.Maintainer); err != nil {
+					rows.Close()
+					return nil, fmt.Errorf("lecture résultat fuzzy: %w", err)
+				}
+				pkgDistance := levenshtein(strings.ToLower(term), strings.ToLower(pkg.Name))
+				maxDistance := len(term) / 4
+				if maxDistance < 1 {
+					maxDistance = 1
+				}
+				if pkgDistance > maxDistance {
+					continue
+				}
+				key := pkg.ProjectName + "\x00" + pkg.Name + "\x00" + pkg.Version
+				if previous, ok := ranked[key]; !ok || pkgDistance < previous.distance {
+					ranked[key] = rankedPackage{pkg: pkg, distance: pkgDistance}
+				}
+			}
+			if err := rows.Err(); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("itération résultats fuzzy: %w", err)
+			}
+			if err := rows.Close(); err != nil {
+				return nil, fmt.Errorf("fermeture résultats fuzzy: %w", err)
+			}
+		}
+	}
+	results := make([]rankedPackage, 0, len(ranked))
+	for _, candidate := range ranked {
+		results = append(results, candidate)
+	}
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].distance == results[j].distance {
+			if results[i].pkg.Name == results[j].pkg.Name {
+				return results[i].pkg.ProjectName < results[j].pkg.ProjectName
+			}
+			return results[i].pkg.Name < results[j].pkg.Name
+		}
+		return results[i].distance < results[j].distance
+	})
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	packages := make([]StoredPackage, len(results))
+	for index, result := range results {
+		packages[index] = result.pkg
+	}
+	return packages, nil
+}
+
+func searchGrams(value string) []string {
+	runes := []rune(value)
+	gramSize := 4
+	if len(runes) < gramSize {
+		gramSize = len(runes)
+	}
+	grams := make([]string, 0, len(runes)-gramSize+1)
+	seen := make(map[string]struct{})
+	for index := 0; index+gramSize <= len(runes); index++ {
+		gram := string(runes[index : index+gramSize])
+		if _, exists := seen[gram]; exists {
+			continue
+		}
+		seen[gram] = struct{}{}
+		grams = append(grams, gram)
+	}
+	return grams
+}
+
+func escapeLike(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	value = strings.ReplaceAll(value, `%`, `\%`)
+	return strings.ReplaceAll(value, `_`, `\_`)
+}
+
+func levenshtein(left, right string) int {
+	leftRunes, rightRunes := []rune(left), []rune(right)
+	previous := make([]int, len(rightRunes)+1)
+	for index := range previous {
+		previous[index] = index
+	}
+	for i, leftRune := range leftRunes {
+		current := make([]int, len(rightRunes)+1)
+		current[0] = i + 1
+		for j, rightRune := range rightRunes {
+			cost := 0
+			if leftRune != rightRune {
+				cost = 1
+			}
+			deletion := previous[j+1] + 1
+			insertion := current[j] + 1
+			substitution := previous[j] + cost
+			current[j+1] = min(deletion, insertion, substitution)
+		}
+		previous = current
+	}
+	return previous[len(right)]
+}
+
+func min(values ...int) int {
+	value := values[0]
+	for _, candidate := range values[1:] {
+		if candidate < value {
+			value = candidate
+		}
+	}
+	return value
 }

@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/transpose-project/transpose/internal/resolver"
 	"github.com/transpose-project/transpose/internal/resolver/repology"
+	"github.com/transpose-project/transpose/pkg/manifest"
 )
 
 func newResolveCmd() *cobra.Command {
@@ -28,16 +30,53 @@ func newResolveCmdWithDBPath(dbPath string) *cobra.Command {
 		Short: "Generate a CSV sample of Repology candidates",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			explain, err := cmd.Flags().GetString("explain")
+			if err != nil {
+				return err
+			}
 			manifestPath, err := cmd.Flags().GetString("from-manifest")
 			if err != nil {
 				return err
 			}
-			if manifestPath == "" {
+			if manifestPath == "" && explain == "" {
 				return fmt.Errorf("--from-manifest est obligatoire")
 			}
 			targetRepo, err := cmd.Flags().GetString("target")
 			if err != nil {
 				return err
+			}
+			if explain != "" {
+				if dbPath == "" {
+					return fmt.Errorf("chemin de base Repology indisponible")
+				}
+				db, err := repology.OpenDB(dbPath)
+				if err != nil {
+					return err
+				}
+				defer db.Close()
+				resolutions, err := resolver.ResolveManifest(cmd.Context(), db, &manifest.Manifest{
+					Packages: []manifest.Package{{Name: explain, Manager: "dnf"}},
+				}, targetRepo, 1)
+				if err != nil {
+					return err
+				}
+				if len(resolutions) != 1 {
+					return fmt.Errorf("aucun diagnostic produit pour %q", explain)
+				}
+				result := resolutions[0]
+				fmt.Fprintf(cmd.OutOrStdout(), "%s\n  → project_name candidats : [%s]\n",
+					explain, strings.Join(result.ProjectNames, ", "))
+				if result.TargetName != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "  → candidat %s : %s (version %s)\n",
+						targetRepo, result.TargetName, result.TargetVersion)
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "  → 0 candidat %s\n", targetRepo)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "  → status : %s, confidence : %s\n", result.Status, result.Confidence)
+				if result.Notes != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "  → notes : %s\n", result.Notes)
+				}
+				return nil
 			}
 			sample, err := cmd.Flags().GetInt("sample")
 			if err != nil {
@@ -91,5 +130,6 @@ func newResolveCmdWithDBPath(dbPath string) *cobra.Command {
 	command.Flags().String("target", "debian_13", "Repology target repository")
 	command.Flags().Int("sample", 0, "Limit the output to the first N source packages (0 means all)")
 	command.Flags().String("output", "", "Required CSV output path")
+	command.Flags().String("explain", "", "Explain resolution for one source package")
 	return command
 }
