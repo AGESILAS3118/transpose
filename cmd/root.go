@@ -24,7 +24,7 @@ func newRootCmd() *cobra.Command {
 	}
 	rootCmd.SetVersionTemplate("xpose {{.Version}}\n")
 	rootCmd.PersistentFlags().Bool("dry-run", false, "Show planned changes without applying them")
-	rootCmd.PersistentFlags().String("format", "yaml", "Output format (json|yaml)")
+	rootCmd.PersistentFlags().String("format", "yaml", "Output format (yaml|json|raw)")
 	rootCmd.PersistentFlags().String("lang", "en", "Interface language (fr|en)")
 	rootCmd.PersistentFlags().Bool("offline", false, "Do not access the network")
 	rootCmd.PersistentFlags().BoolP("yes", "y", false, "Answer yes to confirmation prompts")

@@ -21,6 +21,11 @@ type Remote struct {
 	URL  string `json:"url"`
 }
 
+type App struct {
+	Ref   string `json:"ref"`
+	Scope string `json:"scope"`
+}
+
 type Adapter struct {
 	run          adapter.CommandRunner
 	systemAppDir string
@@ -90,6 +95,7 @@ func (a *Adapter) Capture() (*adapter.CaptureResult, error) {
 				"system": systemRemotes,
 				"user":   userRemotes,
 			}
+			result.Raw["apps"] = parseApps(listOutput)
 			result.Raw["overrides"] = map[string]string{
 				"system": string(systemOverrides),
 				"user":   string(userOverrides),
@@ -100,7 +106,7 @@ func (a *Adapter) Capture() (*adapter.CaptureResult, error) {
 	}
 
 	result.Warnings = append(result.Warnings, "niveau 1 flatpak indisponible : "+listErr.Error()+" — bascule au niveau 2")
-	packages, scanErr := a.scanApps()
+	packages, apps, scanErr := a.scanApps()
 	if scanErr != nil {
 		return nil, fmt.Errorf("capture flatpak impossible: niveau 1: %v; niveau 2: %w", listErr, scanErr)
 	}
@@ -111,6 +117,7 @@ func (a *Adapter) Capture() (*adapter.CaptureResult, error) {
 	result.Reliability = adapter.ReliabilityLow
 	result.Packages = packages
 	result.Raw["refs"] = packages
+	result.Raw["apps"] = apps
 	return result, nil
 }
 
@@ -134,9 +141,10 @@ func (a *Adapter) readRemotes(scope string) ([]Remote, error) {
 	return remotes, nil
 }
 
-func (a *Adapter) scanApps() ([]adapter.Package, error) {
+func (a *Adapter) scanApps() ([]adapter.Package, []App, error) {
 	dirs := []string{a.systemAppDir, a.userAppDir}
 	var packages []adapter.Package
+	var apps []App
 	seen := make(map[string]struct{})
 	var scanErrors []error
 	readableDirs := 0
@@ -177,15 +185,37 @@ func (a *Adapter) scanApps() ([]adapter.Package, error) {
 					}
 					seen[ref] = struct{}{}
 					packages = append(packages, adapter.Package{Name: ref, Source: adapter.Level2})
+					scope := "user"
+					if root == a.systemAppDir {
+						scope = "system"
+					}
+					apps = append(apps, App{Ref: ref, Scope: scope})
 				}
 			}
 		}
 	}
 	if readableDirs == 0 {
-		return nil, errors.Join(scanErrors...)
+		return nil, nil, errors.Join(scanErrors...)
 	}
 	sort.Slice(packages, func(i, j int) bool { return packages[i].Name < packages[j].Name })
-	return packages, errors.Join(scanErrors...)
+	sort.Slice(apps, func(i, j int) bool { return apps[i].Ref < apps[j].Ref })
+	return packages, apps, errors.Join(scanErrors...)
+}
+
+func parseApps(output []byte) []App {
+	var apps []App
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) == 0 || strings.TrimSpace(fields[0]) == "" {
+			continue
+		}
+		scope := "user"
+		if len(fields) > 3 && strings.EqualFold(strings.TrimSpace(fields[3]), "system") {
+			scope = "system"
+		}
+		apps = append(apps, App{Ref: strings.TrimSpace(fields[0]), Scope: scope})
+	}
+	return apps
 }
 
 func parseList(output []byte) []adapter.Package {

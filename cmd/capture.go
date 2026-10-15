@@ -1,15 +1,19 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/transpose-project/transpose/internal/adapter"
-	"github.com/transpose-project/transpose/internal/adapter/flatpak"
+	"github.com/transpose-project/transpose/internal/planner"
+	"github.com/transpose-project/transpose/pkg/manifest"
 )
 
 func newCaptureCmd() *cobra.Command {
@@ -17,19 +21,21 @@ func newCaptureCmd() *cobra.Command {
 }
 
 func newCaptureCmdWithAdapters(adapters []adapter.Adapter) *cobra.Command {
-	return &cobra.Command{
+	command := &cobra.Command{
 		Use:   "capture",
-		Short: "Capture installed packages using resilient adapters",
+		Short: "Capture installed packages and write a versioned manifest",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			selected, err := cmd.Flags().GetStringSlice("only")
 			if err != nil {
 				return err
 			}
-			selectedSet := make(map[string]struct{}, len(selected))
-			for _, name := range selected {
-				selectedSet[strings.TrimSpace(name)] = struct{}{}
+			excluded, err := cmd.Flags().GetStringSlice("exclude")
+			if err != nil {
+				return err
 			}
+			selectedSet := stringSet(selected)
+			excludedSet := stringSet(excluded)
 			known := make(map[string]bool, len(adapters))
 			for _, pkgAdapter := range adapters {
 				known[pkgAdapter.Name()] = true
@@ -39,12 +45,20 @@ func newCaptureCmdWithAdapters(adapters []adapter.Adapter) *cobra.Command {
 					return fmt.Errorf("gestionnaire inconnu %q (disponibles: dnf, flatpak, apt)", name)
 				}
 			}
+			for name := range excludedSet {
+				if !known[name] {
+					return fmt.Errorf("gestionnaire inconnu dans --exclude : %q", name)
+				}
+			}
 
 			results := make([]*adapter.CaptureResult, 0, len(adapters))
 			for _, pkgAdapter := range adapters {
 				name := pkgAdapter.Name()
 				_, isSelected := selectedSet[name]
 				if len(selectedSet) > 0 && !isSelected {
+					continue
+				}
+				if _, skip := excludedSet[name]; skip {
 					continue
 				}
 				if name == "apt" {
@@ -69,58 +83,101 @@ func newCaptureCmdWithAdapters(adapters []adapter.Adapter) *cobra.Command {
 				}
 				results = append(results, result)
 			}
-			if len(results) == 0 {
-				return errors.New("aucun adaptateur de capture disponible")
-			}
 
 			format, err := cmd.Flags().GetString("format")
 			if err != nil {
 				return err
 			}
-			if format == "json" {
-				encoder := json.NewEncoder(cmd.OutOrStdout())
-				encoder.SetIndent("", "  ")
-				return encoder.Encode(results)
+			if format != "yaml" && format != "json" && format != "raw" {
+				return fmt.Errorf("format inconnu %q (attendu yaml, json ou raw)", format)
 			}
-			return writeCaptureSummary(cmd.OutOrStdout(), results)
+			for _, result := range results {
+				for _, warning := range result.Warnings {
+					if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "⚠ %s\n", warning); err != nil {
+						return err
+					}
+				}
+			}
+			var content bytes.Buffer
+			if format == "raw" {
+				encoder := json.NewEncoder(&content)
+				encoder.SetIndent("", "  ")
+				if err := encoder.Encode(results); err != nil {
+					return err
+				}
+			} else {
+				result, buildErr := planner.BuildManifest(results)
+				if buildErr != nil {
+					return fmt.Errorf("construction du manifeste impossible: %w", buildErr)
+				}
+				validationWarnings, err := manifest.ValidateWithWarnings(result)
+				if err != nil {
+					return fmt.Errorf("manifeste invalide: %w", err)
+				}
+				for _, warning := range validationWarnings {
+					if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "⚠ %s\n", warning); err != nil {
+						return err
+					}
+				}
+				if format == "json" {
+					encoder := json.NewEncoder(&content)
+					encoder.SetIndent("", "  ")
+					if err := encoder.Encode(result); err != nil {
+						return err
+					}
+				} else if err := manifest.WriteYAML(result, &content); err != nil {
+					return err
+				}
+			}
+			output, closeOutput, err := captureOutput(cmd)
+			if err != nil {
+				return err
+			}
+			_, writeErr := io.Copy(output, &content)
+			return errors.Join(writeErr, closeOutput())
 		},
 	}
+	command.Flags().StringP("output", "o", "", "Write manifest to a file instead of stdout")
+	return command
+}
+
+func stringSet(values []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			set[value] = struct{}{}
+		}
+	}
+	return set
+}
+
+func captureOutput(cmd *cobra.Command) (io.Writer, func() error, error) {
+	path, err := cmd.Flags().GetString("output")
+	if err != nil {
+		return nil, func() error { return nil }, err
+	}
+	if path == "" {
+		return cmd.OutOrStdout(), func() error { return nil }, nil
+	}
+	parent := filepath.Dir(path)
+	if parent != "." {
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			return nil, func() error { return nil }, fmt.Errorf("création du dossier %s: %w", parent, err)
+		}
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return nil, func() error { return nil }, fmt.Errorf("création du manifeste %s: %w", path, err)
+	}
+	return file, func() error {
+		if err := file.Close(); err != nil {
+			return fmt.Errorf("fermeture du manifeste %s: %w", path, err)
+		}
+		return nil
+	}, nil
 }
 
 func pkgAdapterError(name, reason string) error {
 	return fmt.Errorf("capture %s impossible : %s", name, reason)
-}
-
-func writeCaptureSummary(output io.Writer, results []*adapter.CaptureResult) error {
-	for _, result := range results {
-		unit := "paquets"
-		details := fmt.Sprintf("%d %s", len(result.Packages), unit)
-		if result.Manager == "flatpak" {
-			details = fmt.Sprintf("%d apps, %d remotes", len(result.Packages), countFlatpakRemotes(result))
-		}
-		if _, err := fmt.Fprintf(output, "%s — niveau %d (reliability: %s) — %s\n",
-			result.Manager, result.Level, result.Reliability, details); err != nil {
-			return err
-		}
-		for _, warning := range result.Warnings {
-			if _, err := fmt.Fprintf(output, "  ⚠ %s\n", warning); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func countFlatpakRemotes(result *adapter.CaptureResult) int {
-	raw, ok := result.Raw["remotes"].(map[string][]flatpak.Remote)
-	if !ok {
-		return 0
-	}
-	names := make(map[string]struct{})
-	for _, remotes := range raw {
-		for _, remote := range remotes {
-			names[remote.Name] = struct{}{}
-		}
-	}
-	return len(names)
 }
