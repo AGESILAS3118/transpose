@@ -18,6 +18,23 @@ Dernière mise à jour : 2026-10-15
 - Bug identifié : un fuzzy match avec un candidat était classé ambiguous ; corrigé.
 - Décision : base de production construite en CI depuis le dump PostgreSQL (Phase 1, F8). L'API ne sera jamais la source de production.
 
+[DÉCISIONS VALIDÉES PHASE 0]
+[x] Go 1.23 + cobra : binaire statique OK, CGO_ENABLED=0 OK
+[x] Cascade de repli (CLI → bas niveau → fichiers d'état) : validée par tests mockés
+[x] Schéma YAML : versionné, champs inconnus préservés, validation OK
+[x] Repology API : trop lente pour usage interactif → réservée au debug
+[x] Repology dump PostgreSQL : seule source fiable pour la prod → pipeline CI requis
+[x] Résolution par project_name + normalisation + fuzzy : fondation prête
+[x] Précision du résolveur : ~90 %+ quand il trouve (vérification manuelle 200 lignes)
+[x] Flatpak : universel, 100 % portable, à prioriser dans le plan d'installation
+[x] Architecture adaptateur/interface : extensible (apt stub déjà en place)
+
+[DÉCISIONS REPORTÉES PHASE 1]
+[ ] Import du dump PostgreSQL en CI (F8) — bloquant pour cross-family
+[ ] Résolveur AppStream pour apps graphiques (F4+) — après base CI
+[ ] Test fuzzy fallback en conditions réelles
+[ ] Mesure qualité sur 500+ paquets
+
 [PHASE 1 — MVP v0.1 → v0.3] (6-8 semaines)
 MVP v0.1 — même famille Fedora ↔ Fedora + Flatpak
 [ ] F1  — Capture dnf/rpm + apt/dpkg avec repli en cascade + doctor
