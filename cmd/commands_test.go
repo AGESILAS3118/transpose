@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/transpose-project/transpose/internal/adapter"
+	"github.com/transpose-project/transpose/pkg/manifest"
 )
 
 type mockAdapter struct {
@@ -72,12 +73,13 @@ func TestCaptureJSONIncludesInternalResult(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("capture execution error = %v", err)
 	}
-	var results []adapter.CaptureResult
-	if err := json.Unmarshal(output.Bytes(), &results); err != nil {
+	var result manifest.Manifest
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
 		t.Fatalf("invalid JSON output: %v\n%s", err, output.String())
 	}
-	if len(results) != 1 || results[0].Level != adapter.Level2 || results[0].Packages[0].Name != "htop" {
-		t.Errorf("JSON results = %#v, want internal dnf CaptureResult", results)
+	if result.Schema != manifest.SchemaVersion || len(result.Packages) != 1 ||
+		result.Packages[0].Manager != "dnf" || result.Packages[0].Name != "htop" {
+		t.Errorf("JSON manifest = %#v, want dnf manifest package", result)
 	}
 }
 
@@ -103,6 +105,7 @@ func commandRoot(command *cobra.Command) *cobra.Command {
 	root := &cobra.Command{Use: "xpose", SilenceErrors: true, SilenceUsage: true}
 	root.PersistentFlags().String("format", "yaml", "output format")
 	root.PersistentFlags().StringSlice("only", nil, "selected managers")
+	root.PersistentFlags().StringSlice("exclude", nil, "excluded managers")
 	root.AddCommand(command)
 	return root
 }
