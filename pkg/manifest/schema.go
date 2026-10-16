@@ -26,14 +26,20 @@ type Source struct {
 	Hostname     string         `yaml:"hostname" json:"hostname"`
 	CapturedAt   time.Time      `yaml:"captured_at" json:"captured_at"`
 	CaptureLevel map[string]int `yaml:"capture_level" json:"capture_level"`
+	Extra        map[string]any `yaml:",inline" json:"-"`
 }
 
 type Repo struct {
-	Kind       string         `yaml:"kind" json:"kind"`
-	Name       string         `yaml:"name" json:"name"`
-	URL        string         `yaml:"url,omitempty" json:"url,omitempty"`
-	ThirdParty bool           `yaml:"third_party,omitempty" json:"third_party,omitempty"`
-	Extra      map[string]any `yaml:",inline" json:"-"`
+	Kind         string         `yaml:"kind" json:"kind"`
+	Name         string         `yaml:"name" json:"name"`
+	URL          string         `yaml:"url,omitempty" json:"url,omitempty"`
+	FileName     string         `yaml:"file_name,omitempty" json:"file_name,omitempty"`
+	Content      string         `yaml:"content,omitempty" json:"content,omitempty"`
+	Enabled      bool           `yaml:"enabled" json:"enabled"`
+	ThirdParty   bool           `yaml:"third_party" json:"third_party"`
+	GPGKeyURL    string         `yaml:"gpg_key_url,omitempty" json:"gpg_key_url,omitempty"`
+	GPGKeySHA256 string         `yaml:"gpg_key_sha256,omitempty" json:"gpg_key_sha256,omitempty"`
+	Extra        map[string]any `yaml:",inline" json:"-"`
 }
 
 type Package struct {
@@ -48,49 +54,58 @@ type FlatpakBlock struct {
 	Remotes   []FlatpakRemote   `yaml:"remotes" json:"remotes"`
 	Apps      []FlatpakApp      `yaml:"apps" json:"apps"`
 	Overrides []FlatpakOverride `yaml:"overrides" json:"overrides"`
+	Extra     map[string]any    `yaml:",inline" json:"-"`
 }
 
 type FlatpakRemote struct {
-	Name  string `yaml:"name" json:"name"`
-	URL   string `yaml:"url,omitempty" json:"url,omitempty"`
-	Scope string `yaml:"scope" json:"scope"`
+	Name  string         `yaml:"name" json:"name"`
+	URL   string         `yaml:"url,omitempty" json:"url,omitempty"`
+	Scope string         `yaml:"scope" json:"scope"`
+	Extra map[string]any `yaml:",inline" json:"-"`
 }
 
 type FlatpakApp struct {
-	Ref   string `yaml:"ref" json:"ref"`
-	Scope string `yaml:"scope" json:"scope"`
+	Ref   string         `yaml:"ref" json:"ref"`
+	Scope string         `yaml:"scope" json:"scope"`
+	Extra map[string]any `yaml:",inline" json:"-"`
 }
 
 type FlatpakOverride struct {
-	Ref   string   `yaml:"ref,omitempty" json:"ref,omitempty"`
-	Scope string   `yaml:"scope" json:"scope"`
-	Args  []string `yaml:"args,omitempty" json:"args,omitempty"`
+	Ref   string         `yaml:"ref,omitempty" json:"ref,omitempty"`
+	Scope string         `yaml:"scope" json:"scope"`
+	Args  []string       `yaml:"args,omitempty" json:"args,omitempty"`
+	Extra map[string]any `yaml:",inline" json:"-"`
 }
 
 type Snap struct {
-	Name    string `yaml:"name" json:"name"`
-	Channel string `yaml:"channel,omitempty" json:"channel,omitempty"`
-	Scope   string `yaml:"scope,omitempty" json:"scope,omitempty"`
+	Name    string         `yaml:"name" json:"name"`
+	Channel string         `yaml:"channel,omitempty" json:"channel,omitempty"`
+	Scope   string         `yaml:"scope,omitempty" json:"scope,omitempty"`
+	Extra   map[string]any `yaml:",inline" json:"-"`
 }
 
 type LanguagePackages struct {
-	Pipx  []string `yaml:"pipx,omitempty" json:"pipx,omitempty"`
-	Cargo []string `yaml:"cargo,omitempty" json:"cargo,omitempty"`
-	Npm   []string `yaml:"npm,omitempty" json:"npm,omitempty"`
+	Pipx  []string       `yaml:"pipx,omitempty" json:"pipx,omitempty"`
+	Cargo []string       `yaml:"cargo,omitempty" json:"cargo,omitempty"`
+	Npm   []string       `yaml:"npm,omitempty" json:"npm,omitempty"`
+	Extra map[string]any `yaml:",inline" json:"-"`
 }
 
 type CronEntry struct {
-	Schedule string `yaml:"schedule" json:"schedule"`
-	Command  string `yaml:"command" json:"command"`
-	User     string `yaml:"user,omitempty" json:"user,omitempty"`
+	Schedule string         `yaml:"schedule" json:"schedule"`
+	Command  string         `yaml:"command" json:"command"`
+	User     string         `yaml:"user,omitempty" json:"user,omitempty"`
+	Extra    map[string]any `yaml:",inline" json:"-"`
 }
 
 type ConfigsBlock struct {
-	Dotfiles   []string `yaml:"dotfiles,omitempty" json:"dotfiles,omitempty"`
-	AppConfigs []string `yaml:"app_configs,omitempty" json:"app_configs,omitempty"`
+	Dotfiles   []string       `yaml:"dotfiles,omitempty" json:"dotfiles,omitempty"`
+	AppConfigs []string       `yaml:"app_configs,omitempty" json:"app_configs,omitempty"`
+	Extra      map[string]any `yaml:",inline" json:"-"`
 }
 
 type UnmanagedEntry struct {
-	Kind string `yaml:"kind" json:"kind"`
-	Path string `yaml:"path" json:"path"`
+	Kind  string         `yaml:"kind" json:"kind"`
+	Path  string         `yaml:"path" json:"path"`
+	Extra map[string]any `yaml:",inline" json:"-"`
 }
