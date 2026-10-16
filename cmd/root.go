@@ -32,11 +32,17 @@ func newRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().StringSlice("only", nil, "Limit operations to these components")
 	rootCmd.PersistentFlags().StringSlice("exclude", nil, "Exclude these components")
 
-	for _, name := range []string{"pack", "apply", "diff"} {
-		rootCmd.AddCommand(newPlaceholderCmd(name))
-	}
-	rootCmd.AddCommand(newPlanCmd())
+	packCmd := newPlaceholderCmd("pack <manifest>", "Create a portable archive from a manifest", cobra.ExactArgs(1))
+	packCmd.Flags().StringP("output", "o", "", "Write the archive to this file")
+	packCmd.Flags().Bool("encrypt", false, "Encrypt the archive with a passphrase")
+	rootCmd.AddCommand(
+		packCmd,
+		newPlanCmd(),
+		newPlaceholderCmd("apply <manifest>", "Apply a validated migration plan", cobra.ExactArgs(1)),
+		newPlaceholderCmd("diff <manifest-a> <manifest-b>", "Compare two manifests", cobra.ExactArgs(2)),
+	)
 	rootCmd.AddCommand(newResolveCmd())
+	rootCmd.AddCommand(newReposCmd())
 	rootCmd.AddCommand(newUpdateDBCmd())
 	rootCmd.AddCommand(newCaptureCmd())
 	rootCmd.AddCommand(newDoctorCmd())
@@ -44,12 +50,13 @@ func newRootCmd() *cobra.Command {
 	return rootCmd
 }
 
-func newPlaceholderCmd(name string) *cobra.Command {
+func newPlaceholderCmd(use, short string, args cobra.PositionalArgs) *cobra.Command {
 	return &cobra.Command{
-		Use:   name,
-		Short: fmt.Sprintf("%s (not implemented)", name),
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("%s: not implemented\n", name)
+		Use:   use,
+		Short: short + " (not implemented)",
+		Args:  args,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return fmt.Errorf("%s: not implemented", cmd.Name())
 		},
 	}
 }
