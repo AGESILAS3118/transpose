@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"context"
 	"reflect"
 	"strings"
 	"testing"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/transpose-project/transpose/internal/adapter"
 	"github.com/transpose-project/transpose/internal/adapter/flatpak"
+	repoadapter "github.com/transpose-project/transpose/internal/adapter/repos"
 	"github.com/transpose-project/transpose/pkg/manifest"
 )
 
@@ -88,5 +90,36 @@ func TestBuildManifest_SourceMetadata(t *testing.T) {
 	}
 	if m.Source.Hostname != "fake-host" {
 		t.Errorf("Hostname = %q, want fake-host", m.Source.Hostname)
+	}
+}
+
+type repoCollectorFixture struct {
+	name  string
+	repos []manifest.Repo
+	calls int
+}
+
+func (c *repoCollectorFixture) Name() string { return c.name }
+func (c *repoCollectorFixture) Detect() (bool, error) {
+	c.calls++
+	return true, nil
+}
+func (c *repoCollectorFixture) Collect(context.Context) ([]manifest.Repo, error) {
+	return c.repos, nil
+}
+
+func TestBuildManifest_CollectsRPMRepos(t *testing.T) {
+	collector := &repoCollectorFixture{
+		name:  "rpm",
+		repos: []manifest.Repo{{Kind: "rpm", Name: "fedora", FileName: "fedora.repo", Enabled: true}},
+	}
+	m, warnings, err := BuildManifestWithRepoCollectors(
+		nil, strings.NewReader("ID=fedora\nVERSION_ID=44\n"), "host", time.Time{}, []repoadapter.RepoCollector{collector},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 0 || len(m.Repos) != 1 || m.Source.CaptureLevel["repos_rpm"] != 1 || collector.calls != 1 {
+		t.Fatalf("manifest=%#v warnings=%#v calls=%d", m, warnings, collector.calls)
 	}
 }

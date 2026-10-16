@@ -12,15 +12,23 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/transpose-project/transpose/internal/adapter"
+	repoadapter "github.com/transpose-project/transpose/internal/adapter/repos"
 	"github.com/transpose-project/transpose/internal/planner"
 	"github.com/transpose-project/transpose/pkg/manifest"
 )
 
 func newCaptureCmd() *cobra.Command {
-	return newCaptureCmdWithAdapters(allAdapters())
+	return newCaptureCmdWithAdaptersAndRepoCollectors(allAdapters(), []repoadapter.RepoCollector{
+		repoadapter.NewRPMRepoCollector(""),
+		repoadapter.NewAPTRepoCollector(""),
+	})
 }
 
 func newCaptureCmdWithAdapters(adapters []adapter.Adapter) *cobra.Command {
+	return newCaptureCmdWithAdaptersAndRepoCollectors(adapters, nil)
+}
+
+func newCaptureCmdWithAdaptersAndRepoCollectors(adapters []adapter.Adapter, repoCollectors []repoadapter.RepoCollector) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "capture",
 		Short: "Capture installed packages and write a versioned manifest",
@@ -106,9 +114,22 @@ func newCaptureCmdWithAdapters(adapters []adapter.Adapter) *cobra.Command {
 					return err
 				}
 			} else {
-				result, buildErr := planner.BuildManifest(results)
+				noRepos, err := cmd.Flags().GetBool("no-repos")
+				if err != nil {
+					return err
+				}
+				collectors := repoCollectors
+				if noRepos {
+					collectors = nil
+				}
+				result, repoWarnings, buildErr := planner.BuildManifestWithCollectors(results, collectors)
 				if buildErr != nil {
 					return fmt.Errorf("construction du manifeste impossible: %w", buildErr)
+				}
+				for _, warning := range repoWarnings {
+					if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "⚠ %s\n", warning); err != nil {
+						return err
+					}
 				}
 				validationWarnings, err := manifest.ValidateWithWarnings(result)
 				if err != nil {
@@ -120,9 +141,7 @@ func newCaptureCmdWithAdapters(adapters []adapter.Adapter) *cobra.Command {
 					}
 				}
 				if format == "json" {
-					encoder := json.NewEncoder(&content)
-					encoder.SetIndent("", "  ")
-					if err := encoder.Encode(result); err != nil {
+					if err := manifest.WriteJSON(result, &content); err != nil {
 						return err
 					}
 				} else if err := manifest.WriteYAML(result, &content); err != nil {
@@ -138,6 +157,7 @@ func newCaptureCmdWithAdapters(adapters []adapter.Adapter) *cobra.Command {
 		},
 	}
 	command.Flags().StringP("output", "o", "", "Write manifest to a file instead of stdout")
+	command.Flags().Bool("no-repos", false, "Skip native repository collection")
 	return command
 }
 

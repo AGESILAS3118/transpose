@@ -2,6 +2,7 @@ package planner
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -14,30 +15,50 @@ import (
 
 	"github.com/transpose-project/transpose/internal/adapter"
 	"github.com/transpose-project/transpose/internal/adapter/flatpak"
+	repoadapter "github.com/transpose-project/transpose/internal/adapter/repos"
+	"github.com/transpose-project/transpose/internal/sysutil"
 	"github.com/transpose-project/transpose/pkg/manifest"
 )
 
 func BuildManifest(results []*adapter.CaptureResult) (*manifest.Manifest, error) {
+	m, _, err := BuildManifestWithCollectors(results, defaultRepoCollectors())
+	return m, err
+}
+
+func BuildManifestWithCollectors(results []*adapter.CaptureResult, collectors []repoadapter.RepoCollector) (*manifest.Manifest, []string, error) {
 	osRelease, err := os.Open("/etc/os-release")
 	if err != nil {
-		return nil, fmt.Errorf("lecture /etc/os-release: %w", err)
+		return nil, nil, fmt.Errorf("lecture /etc/os-release: %w", err)
 	}
-	defer osRelease.Close()
 	hostname, err := os.Hostname()
 	if err != nil {
-		return nil, fmt.Errorf("lecture du hostname: %w", err)
+		_ = osRelease.Close()
+		return nil, nil, fmt.Errorf("lecture du hostname: %w", err)
 	}
-	m, buildErr := BuildManifestWithSource(results, osRelease, hostname, time.Now().UTC())
+	m, warnings, buildErr := BuildManifestWithRepoCollectors(
+		results, osRelease, hostname, time.Now().UTC(), collectors,
+	)
 	if err := osRelease.Close(); err != nil {
-		return nil, errors.Join(buildErr, fmt.Errorf("fermeture de /etc/os-release: %w", err))
+		return nil, nil, errors.Join(buildErr, fmt.Errorf("fermeture de /etc/os-release: %w", err))
 	}
-	return m, buildErr
+	return m, warnings, buildErr
 }
 
 func BuildManifestWithSource(results []*adapter.CaptureResult, osRelease io.Reader, hostname string, capturedAt time.Time) (*manifest.Manifest, error) {
+	m, _, err := BuildManifestWithRepoCollectors(results, osRelease, hostname, capturedAt, nil)
+	return m, err
+}
+
+func BuildManifestWithRepoCollectors(
+	results []*adapter.CaptureResult,
+	osRelease io.Reader,
+	hostname string,
+	capturedAt time.Time,
+	collectors []repoadapter.RepoCollector,
+) (*manifest.Manifest, []string, error) {
 	sourceData, err := parseOSRelease(osRelease)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	m := &manifest.Manifest{
 		Schema: manifest.SchemaVersion,
@@ -59,18 +80,18 @@ func BuildManifestWithSource(results []*adapter.CaptureResult, osRelease io.Read
 	}
 	for index, result := range results {
 		if result == nil {
-			return nil, fmt.Errorf("résultat de capture %d nil", index)
+			return nil, nil, fmt.Errorf("résultat de capture %d nil", index)
 		}
 		if result.Manager == "" {
-			return nil, fmt.Errorf("nom de gestionnaire vide pour le résultat %d", index)
+			return nil, nil, fmt.Errorf("nom de gestionnaire vide pour le résultat %d", index)
 		}
 		if result.Level < 1 || result.Level > 3 {
-			return nil, fmt.Errorf("niveau de capture invalide pour %s : %d", result.Manager, result.Level)
+			return nil, nil, fmt.Errorf("niveau de capture invalide pour %s : %d", result.Manager, result.Level)
 		}
 		m.Source.CaptureLevel[result.Manager] = int(result.Level)
 		if result.Manager == "flatpak" {
 			if err := addFlatpakData(&m.Flatpak, result.Raw); err != nil {
-				return nil, fmt.Errorf("conversion des données Flatpak: %w", err)
+				return nil, nil, fmt.Errorf("conversion des données Flatpak: %w", err)
 			}
 			continue
 		}
@@ -82,6 +103,39 @@ func BuildManifestWithSource(results []*adapter.CaptureResult, osRelease io.Read
 			})
 		}
 	}
+	activeRepoManager := ""
+	switch sysutil.FamilyForDistro(sourceData["ID"], sourceData["ID_LIKE"]) {
+	case "rpm":
+		activeRepoManager = "rpm"
+	case "debian":
+		activeRepoManager = "apt"
+	}
+	var repoWarnings []string
+	for _, collector := range collectors {
+		if collector == nil || collector.Name() != activeRepoManager {
+			continue
+		}
+		present, err := collector.Detect()
+		if err != nil {
+			return nil, nil, fmt.Errorf("détection des dépôts %s impossible: %w", collector.Name(), err)
+		}
+		if !present {
+			continue
+		}
+		collected, err := collector.Collect(context.Background())
+		if err != nil {
+			return nil, nil, fmt.Errorf("collecte des dépôts %s impossible: %w", collector.Name(), err)
+		}
+		m.Repos = append(m.Repos, collected...)
+		m.Source.CaptureLevel["repos_"+collector.Name()] = 1
+		repoWarnings = append(repoWarnings, repoadapter.Warnings(collector)...)
+	}
+	sort.Slice(m.Repos, func(i, j int) bool {
+		if m.Repos[i].Kind == m.Repos[j].Kind {
+			return m.Repos[i].Name < m.Repos[j].Name
+		}
+		return m.Repos[i].Kind < m.Repos[j].Kind
+	})
 	sort.Slice(m.Packages, func(i, j int) bool {
 		if m.Packages[i].Manager == m.Packages[j].Manager {
 			return m.Packages[i].Name < m.Packages[j].Name
@@ -107,9 +161,16 @@ func BuildManifestWithSource(results []*adapter.CaptureResult, osRelease io.Read
 		return m.Flatpak.Overrides[i].Scope < m.Flatpak.Overrides[j].Scope
 	})
 	if m.Source.Distro == "" {
-		return nil, errors.New("ID absent de /etc/os-release")
+		return nil, nil, errors.New("ID absent de /etc/os-release")
 	}
-	return m, nil
+	return m, repoWarnings, nil
+}
+
+func defaultRepoCollectors() []repoadapter.RepoCollector {
+	return []repoadapter.RepoCollector{
+		repoadapter.NewRPMRepoCollector(""),
+		repoadapter.NewAPTRepoCollector(""),
+	}
 }
 
 func parseOSRelease(input io.Reader) (map[string]string, error) {

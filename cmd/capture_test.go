@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/transpose-project/transpose/internal/adapter"
+	repoadapter "github.com/transpose-project/transpose/internal/adapter/repos"
 	"github.com/transpose-project/transpose/pkg/manifest"
 )
 
@@ -71,6 +73,40 @@ func TestCapture_WarningsGoToStderr(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "warning-for-test") {
 		t.Errorf("stderr %q does not contain capture warning", stderr.String())
+	}
+}
+
+type repoCollectorSpy struct {
+	calls int
+}
+
+func (c *repoCollectorSpy) Name() string { return "rpm" }
+func (c *repoCollectorSpy) Detect() (bool, error) {
+	c.calls++
+	return true, nil
+}
+func (c *repoCollectorSpy) Collect(context.Context) ([]manifest.Repo, error) {
+	c.calls++
+	return []manifest.Repo{{Kind: "rpm", Name: "fedora", FileName: "fedora.repo"}}, nil
+}
+
+func TestCapture_NoReposSkipsCollection(t *testing.T) {
+	collector := &repoCollectorSpy{}
+	root := commandRoot(newCaptureCmdWithAdaptersAndRepoCollectors(
+		[]adapter.Adapter{manifestMockAdapter()}, []repoadapter.RepoCollector{collector},
+	))
+	root.SetArgs([]string{"capture", "--only", "dnf", "--no-repos"})
+	var output bytes.Buffer
+	root.SetOut(&output)
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	result, err := manifest.ReadYAML(bytes.NewReader(output.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if collector.calls != 0 || len(result.Repos) != 0 {
+		t.Fatalf("collector calls=%d repos=%#v", collector.calls, result.Repos)
 	}
 }
 
