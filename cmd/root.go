@@ -32,9 +32,10 @@ func newRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().StringSlice("only", nil, "Limit operations to these components")
 	rootCmd.PersistentFlags().StringSlice("exclude", nil, "Exclude these components")
 
-	for _, name := range []string{"pack", "plan", "apply", "diff"} {
+	for _, name := range []string{"pack", "apply", "diff"} {
 		rootCmd.AddCommand(newPlaceholderCmd(name))
 	}
+	rootCmd.AddCommand(newPlanCmd())
 	rootCmd.AddCommand(newResolveCmd())
 	rootCmd.AddCommand(newUpdateDBCmd())
 	rootCmd.AddCommand(newCaptureCmd())
