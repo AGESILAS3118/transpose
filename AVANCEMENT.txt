@@ -249,6 +249,8 @@ worktree affiche des diffs de mode 644→755 sans changement de contenu.
 Cette config est locale au clone, pas globale. Prochaine étape : F6
 (exécuteur).
 
+2026-10-16 — core.filemode=false configuré en local (dépôt sur volume NTFS).
+
 ====================================================
 LOGIQUE DE MISE À JOUR :
 - Coche [x] dès qu'une tâche est terminée et vérifiée
