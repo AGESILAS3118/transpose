@@ -1,6 +1,6 @@
 ====================================================
 TRANSPOSE — SUIVI D'AVANCEMENT
-Dernière mise à jour : 2026-10-15
+Dernière mise à jour : 2026-10-16
 ====================================================
 
 [PHASE 0 — VALIDATION] (2 semaines)
@@ -39,11 +39,11 @@ Dernière mise à jour : 2026-10-15
 MVP v0.1 — même famille Fedora ↔ Fedora + Flatpak
 [ ] F1  — Capture dnf/rpm + apt/dpkg avec repli en cascade + doctor
 [ ] F2  — Capture Flatpak (système/utilisateur, remotes, overrides)
-[ ] F3  — Manifeste YAML avec schéma et validation
+[x] F3  — Manifeste YAML/JSON avec schéma, sérialisation et validation — terminé le 2026-10-16
 [x] F4  — Résolveur même-famille par nom exact, overrides et alternatives Flatpak — terminé le 2026-10-16
 [x] F5  — Génération et rendu des plans terminal, Markdown et JSON — terminé le 2026-10-16
 [ ] F6  — Exécution dnf, apt, Flatpak, avec journal et reprise
-[ ] F7  — Export des dépôts (/etc/yum.repos.d/, /etc/apt/sources.list*)
+[x] F7  — Export des dépôts (/etc/yum.repos.d/, /etc/apt/sources.list*) — terminé le 2026-10-16
 [ ] F8  — Base de correspondance livrée + update-db signé
 [ ] F9  — Archive .tar.zst
 [ ] F10 — Tests automatisés en conteneurs (Fedora, Ubuntu, Debian)
@@ -70,7 +70,7 @@ MVP v0.1 — même famille Fedora ↔ Fedora + Flatpak
 [ ] Nom "Transpose"/"xpose" validé (GitHub, domaine, marque)
 [ ] Licence code (GPL-3.0 recommandée)
 [ ] Licence données (CC-BY-SA 4.0)
-[ ] Langage confirmé (Go recommandé)
+[x] Langage confirmé : Go 1.22 minimum — terminé le 2026-10-16
 
 [JOURNAL]
 2026-10-14 — Lecture intégrale du PRD. Création du suivi d'avancement, de la
@@ -212,6 +212,17 @@ reclassé en equivalent, le nouvel échantillon compte 79 exact, 9 equivalent,
 que les mesures de précision manuelle citées portent sur le CSV initial.
 `gofmt`, build, vet et les 64 tests passent.
 
+2026-10-16 — Squelette CLI et manifeste vérifiés et complétés pour l'objectif
+de la session. Les commandes pack, plan, apply et diff ont leurs syntaxes et
+arguments d'aide, et retournent explicitement « not implemented » à
+l'exécution. Ajout de la sérialisation JSON au package manifest et de la
+préservation des champs inconnus à tous les niveaux typés du schéma, avec
+tests JSON; capture utilise désormais le sérialiseur du package. Vérifiés :
+`go test ./...`, `go vet ./...`, `go build ./...`, `xpose --help`,
+`xpose capture --help`, `pack --help` et `diff --help`.
+La logique métier des commandes pack, plan, apply et diff n'est pas réalisée,
+conformément au périmètre de cette session.
+
 2026-10-16 — F4/F5 implémentées sans Repology en production ni exécution de
 commandes d'installation. Le résolveur même-famille utilise les noms des
 dépôts dnf/apt, les overrides YAML, les correspondances exactes insensibles à
@@ -228,6 +239,15 @@ Limites restantes : quatre logiciels installés localement ne sont pas dans
 les dépôts activés ; les familles Arch/SUSE sont reconnues mais le requêteur
 de dépôts de la commande n'est pas implémenté. Prochaines étapes : F7 (export
 des dépôts), puis F6 (exécution contrôlée du plan).
+
+2026-10-16 — F7 : capture et planification des dépôts RPM/APT (types manifeste,
+collecteurs, intégration capture, étape de plan, commande `xpose repos`).
+Build, vet et tests passent, dont `internal/adapter/repos`. Config Git locale
+`core.filemode=false` : le dépôt est sur un volume NTFS/exFAT monté sous
+Linux, qui marque tous les fichiers exécutables ; sans cette option le
+worktree affiche des diffs de mode 644→755 sans changement de contenu.
+Cette config est locale au clone, pas globale. Prochaine étape : F6
+(exécuteur).
 
 ====================================================
 LOGIQUE DE MISE À JOUR :
