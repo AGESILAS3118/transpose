@@ -40,8 +40,8 @@ MVP v0.1 — même famille Fedora ↔ Fedora + Flatpak
 [ ] F1  — Capture dnf/rpm + apt/dpkg avec repli en cascade + doctor
 [ ] F2  — Capture Flatpak (système/utilisateur, remotes, overrides)
 [ ] F3  — Manifeste YAML avec schéma et validation
-[ ] F4  — Résolveur sur base Repology locale (dnf ↔ apt), statuts et confiance
-[ ] F5  — Plan en terminal et Markdown, édition avant exécution
+[x] F4  — Résolveur même-famille par nom exact, overrides et alternatives Flatpak — terminé le 2026-10-16
+[x] F5  — Génération et rendu des plans terminal, Markdown et JSON — terminé le 2026-10-16
 [ ] F6  — Exécution dnf, apt, Flatpak, avec journal et reprise
 [ ] F7  — Export des dépôts (/etc/yum.repos.d/, /etc/apt/sources.list*)
 [ ] F8  — Base de correspondance livrée + update-db signé
@@ -211,6 +211,23 @@ reclassé en equivalent, le nouvel échantillon compte 79 exact, 9 equivalent,
 3 ambiguous et 109 not_found (44,0 % exact + equivalent). Le rapport précise
 que les mesures de précision manuelle citées portent sur le CSV initial.
 `gofmt`, build, vet et les 64 tests passent.
+
+2026-10-16 — F4/F5 implémentées sans Repology en production ni exécution de
+commandes d'installation. Le résolveur même-famille utilise les noms des
+dépôts dnf/apt, les overrides YAML, les correspondances exactes insensibles à
+la casse et des alternatives Flatpak pour les apps référencées. La détection
+lit /etc/os-release et reconnaît rpm, debian, arch et suse. `xpose plan`
+charge les manifestes YAML/JSON, bloque le cross-family avec un message F8,
+applique --only/--exclude, et génère des rendus terminal, Markdown et JSON.
+
+Vérifié sur la capture Fedora réelle : plan de 510 entrées, 500 exactes,
+6 alternatives Flatpak, 4 absentes des dépôts et 0 ambiguïté ; le cross-family
+vers Debian est refusé proprement. La commande n'a lancé aucune installation :
+le nombre RPM est resté à 3525. gofmt, build, vet et tous les tests passent.
+Limites restantes : quatre logiciels installés localement ne sont pas dans
+les dépôts activés ; les familles Arch/SUSE sont reconnues mais le requêteur
+de dépôts de la commande n'est pas implémenté. Prochaines étapes : F7 (export
+des dépôts), puis F6 (exécution contrôlée du plan).
 
 ====================================================
 LOGIQUE DE MISE À JOUR :
