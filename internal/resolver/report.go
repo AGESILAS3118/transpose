@@ -13,7 +13,7 @@ type MarkdownReport struct {
 	Date                 string
 	SampleCount          int
 	DatabasePackageCount int
-	Resolutions          []Resolution
+	Resolutions          []RepologyResolution
 }
 
 func WriteMarkdownReport(writer io.Writer, report MarkdownReport) error {

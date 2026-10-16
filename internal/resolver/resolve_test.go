@@ -145,7 +145,7 @@ func TestResolve_FuzzySingleCandidateIsEquivalent(t *testing.T) {
 
 func TestResolve_CSVFormat(t *testing.T) {
 	var output bytes.Buffer
-	resolutions := []Resolution{{
+	resolutions := []RepologyResolution{{
 		Index: 1, SourceName: "name,with comma", SourceVersion: "1",
 		Status: "not_found", Confidence: "low", Notes: "reason, and detail",
 	}}
@@ -168,7 +168,7 @@ func TestResolve_CSVFormat(t *testing.T) {
 	}
 }
 
-func resolveFixture(t *testing.T, sourceName string, target []repology.ProjectPackage) Resolution {
+func resolveFixture(t *testing.T, sourceName string, target []repology.ProjectPackage) RepologyResolution {
 	t.Helper()
 	db, err := repology.OpenDB(":memory:")
 	if err != nil {
@@ -190,7 +190,7 @@ func resolveFixture(t *testing.T, sourceName string, target []repology.ProjectPa
 	return result[0]
 }
 
-func assertResolution(t *testing.T, result Resolution, status, confidence string) {
+func assertResolution(t *testing.T, result RepologyResolution, status, confidence string) {
 	t.Helper()
 	if result.Status != status || result.Confidence != confidence {
 		t.Errorf("resolution = status %q confidence %q, want %q/%q", result.Status, result.Confidence, status, confidence)

@@ -13,7 +13,7 @@ import (
 	"github.com/transpose-project/transpose/pkg/manifest"
 )
 
-type Resolution struct {
+type RepologyResolution struct {
 	Index            int
 	SourceName       string
 	SourceVersion    string
@@ -30,7 +30,7 @@ var CSVHeader = []string{
 	"index", "source_name", "source_version", "target_name", "target_version", "status", "confidence", "notes",
 }
 
-func ResolveManifest(ctx context.Context, db *sql.DB, source *manifest.Manifest, targetRepo string, limit int) ([]Resolution, error) {
+func ResolveManifest(ctx context.Context, db *sql.DB, source *manifest.Manifest, targetRepo string, limit int) ([]RepologyResolution, error) {
 	if db == nil || source == nil {
 		return nil, fmt.Errorf("base et manifeste sont requis")
 	}
@@ -41,12 +41,12 @@ func ResolveManifest(ctx context.Context, db *sql.DB, source *manifest.Manifest,
 	if limit > 0 && limit < len(packages) {
 		packages = packages[:limit]
 	}
-	resolutions := make([]Resolution, 0, len(packages))
+	resolutions := make([]RepologyResolution, 0, len(packages))
 	for index, sourcePackage := range packages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		resolution := Resolution{
+		resolution := RepologyResolution{
 			Index:         index + 1,
 			SourceName:    sourcePackage.Name,
 			SourceVersion: sourcePackage.Version,
@@ -152,7 +152,7 @@ func fuzzySearchTerms(source string) []string {
 	return terms
 }
 
-func WriteCSV(writer io.Writer, resolutions []Resolution) error {
+func WriteCSV(writer io.Writer, resolutions []RepologyResolution) error {
 	csvWriter := csv.NewWriter(writer)
 	if err := csvWriter.Write(CSVHeader); err != nil {
 		return fmt.Errorf("écriture en-tête CSV: %w", err)
