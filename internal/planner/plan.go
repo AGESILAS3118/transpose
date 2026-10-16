@@ -2,6 +2,7 @@ package planner
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -22,11 +23,20 @@ type Plan struct {
 }
 
 type PlanStep struct {
-	Order   int        `json:"order"`
-	Manager string     `json:"manager"`
-	Action  string     `json:"action"`
-	Command string     `json:"command"`
-	Items   []PlanItem `json:"items"`
+	Order     int            `json:"order"`
+	Manager   string         `json:"manager"`
+	Action    string         `json:"action"`
+	Command   string         `json:"command"`
+	Items     []PlanItem     `json:"items"`
+	RepoItems []RepoPlanItem `json:"repo_items,omitempty"`
+}
+
+type RepoPlanItem struct {
+	Repo                 manifest.Repo `json:"repo"`
+	Action               string        `json:"action"`
+	TargetPath           string        `json:"target_path"`
+	RequiresSudo         bool          `json:"requires_sudo"`
+	RequiresConfirmation bool          `json:"requires_confirmation"`
 }
 
 type PlanItem struct {
@@ -113,6 +123,36 @@ func GeneratePlan(m *manifest.Manifest, opts PlanOptions) (*Plan, error) {
 	} else {
 		plan.GeneratedAt = plan.GeneratedAt.UTC()
 	}
+	if len(m.Repos) > 0 {
+		repoItems := make([]RepoPlanItem, 0, len(m.Repos))
+		for _, repo := range m.Repos {
+			targetPath, err := repoTargetPath(repo)
+			if err != nil {
+				return nil, err
+			}
+			repoItems = append(repoItems, RepoPlanItem{
+				Repo:                 repo,
+				Action:               "write-file",
+				TargetPath:           targetPath,
+				RequiresSudo:         true,
+				RequiresConfirmation: repo.ThirdParty,
+			})
+			if repo.ThirdParty && repo.Enabled {
+				plan.Warnings = append(plan.Warnings,
+					fmt.Sprintf("dépôt tiers %q activé : confirmation manuelle requise avant restauration", repo.Name))
+			}
+		}
+		sort.SliceStable(repoItems, func(i, j int) bool {
+			return repoItems[i].TargetPath < repoItems[j].TargetPath
+		})
+		plan.Steps = append(plan.Steps, PlanStep{
+			Order:     1,
+			Manager:   "repos",
+			Action:    "restore-repos",
+			Command:   "write repository files (no changes applied)",
+			RepoItems: repoItems,
+		})
+	}
 	excluded := stringSet(opts.Exclude)
 	only := stringSet(opts.Only)
 	grouped := make(map[string][]PlanItem)
@@ -165,7 +205,7 @@ func GeneratePlan(m *manifest.Manifest, opts PlanOptions) (*Plan, error) {
 		})
 	}
 
-	order := 1
+	order := len(plan.Steps) + 1
 	for _, manager := range managerOrder {
 		items := grouped[manager]
 		if len(items) == 0 {
@@ -198,6 +238,28 @@ func GeneratePlan(m *manifest.Manifest, opts PlanOptions) (*Plan, error) {
 		return strings.ToLower(plan.Skipped[i].Source) < strings.ToLower(plan.Skipped[j].Source)
 	})
 	return plan, nil
+}
+
+func repoTargetPath(repo manifest.Repo) (string, error) {
+	switch repo.Kind {
+	case "rpm":
+		name := filepath.Base(repo.FileName)
+		if name == "." || name == ".." || name == string(filepath.Separator) || name == "" {
+			return "", fmt.Errorf("nom de fichier .repo manquant pour %s", repo.Name)
+		}
+		return filepath.Join("/etc/yum.repos.d", name), nil
+	case "apt":
+		if repo.FileName == "" || repo.FileName == "sources.list" {
+			return "/etc/apt/sources.list", nil
+		}
+		name := filepath.Base(repo.FileName)
+		if name == "." || name == ".." || name == string(filepath.Separator) || name == "" {
+			return "", fmt.Errorf("nom de fichier APT manquant pour %s", repo.Name)
+		}
+		return filepath.Join("/etc/apt/sources.list.d", name), nil
+	default:
+		return "", fmt.Errorf("type de dépôt non pris en charge : %s", repo.Kind)
+	}
 }
 
 func installCommand(manager string) string {

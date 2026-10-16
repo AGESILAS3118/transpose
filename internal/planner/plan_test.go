@@ -2,6 +2,7 @@ package planner
 
 import (
 	"encoding/json"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -148,6 +149,66 @@ func TestPlan_SummaryCounts(t *testing.T) {
 	want := PlanSummary{TotalPackages: 5, Exact: 1, Equivalent: 1, Alternative: 1, Ambiguous: 1, NotFound: 1}
 	if plan.Summary != want {
 		t.Fatalf("summary = %#v, want %#v", plan.Summary, want)
+	}
+}
+
+func TestPlan_ReposComeFirst(t *testing.T) {
+	m := planFixture(
+		manifest.Package{Name: "one", Manager: "dnf"},
+		manifest.Package{Name: "two", Manager: "dnf"},
+		manifest.Package{Name: "three", Manager: "dnf"},
+	)
+	m.Repos = []manifest.Repo{
+		{Kind: "rpm", Name: "fedora", FileName: "fedora.repo"},
+		{Kind: "rpm", Name: "updates", FileName: "updates.repo"},
+	}
+	plan, err := GeneratePlan(m, PlanOptions{
+		Target:      sysutil.Target{Distro: "fedora", Family: "rpm"},
+		Resolver:    mockPackageResolver{},
+		GeneratedAt: time.Date(2026, 10, 16, 10, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Steps) != 2 || plan.Steps[0].Manager != "repos" ||
+		plan.Steps[0].Action != "restore-repos" || plan.Steps[1].Manager != "dnf" {
+		t.Fatalf("steps = %#v", plan.Steps)
+	}
+	if len(plan.Steps[0].RepoItems) != 2 || plan.Steps[0].RepoItems[0].TargetPath != "/etc/yum.repos.d/fedora.repo" {
+		t.Fatalf("repo items = %#v", plan.Steps[0].RepoItems)
+	}
+}
+
+func TestPlan_ThirdPartyRequiresConfirmation(t *testing.T) {
+	m := planFixture()
+	m.Repos = []manifest.Repo{{
+		Kind: "rpm", Name: "external", FileName: "external.repo", ThirdParty: true,
+	}}
+	plan, err := GeneratePlan(m, PlanOptions{
+		Target:   sysutil.Target{Distro: "fedora", Family: "rpm"},
+		Resolver: mockPackageResolver{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := plan.Steps[0].RepoItems[0]
+	if !item.RequiresConfirmation || !item.RequiresSudo {
+		t.Fatalf("repo plan item = %#v", item)
+	}
+}
+
+func TestPlan_NoSideEffects(t *testing.T) {
+	m := planFixture()
+	m.Repos = []manifest.Repo{{Kind: "rpm", Name: "test", FileName: "test.repo"}}
+	plan, err := GeneratePlan(m, PlanOptions{
+		Target:   sysutil.Target{Distro: "fedora", Family: "rpm"},
+		Resolver: mockPackageResolver{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(plan.Steps[0].RepoItems[0].TargetPath); err == nil {
+		t.Fatal("plan generation unexpectedly created a target repository file")
 	}
 }
 

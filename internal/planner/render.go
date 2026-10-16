@@ -29,6 +29,21 @@ func RenderTerminal(p *Plan, w io.Writer, verbose bool) error {
 		return err
 	}
 	for _, step := range p.Steps {
+		if step.Manager == "repos" {
+			if _, err := fmt.Fprintf(w, "\nÉtape %d — dépôts (%d)\n", step.Order, len(step.RepoItems)); err != nil {
+				return err
+			}
+			for _, item := range step.RepoItems {
+				marker := "[officiel]"
+				if item.RequiresConfirmation {
+					marker = "[tiers, confirmation requise]"
+				}
+				if _, err := fmt.Fprintf(w, "  + %-48s %s\n", item.TargetPath, marker); err != nil {
+					return err
+				}
+			}
+			continue
+		}
 		unit := "paquets"
 		if step.Manager == "flatpak" {
 			unit = "apps"
@@ -94,6 +109,25 @@ func RenderMarkdown(p *Plan, w io.Writer) error {
 		return err
 	}
 	for _, step := range p.Steps {
+		if step.Manager == "repos" {
+			if _, err := fmt.Fprintf(w, "\n## Étape %d — dépôts (%d)\n\n| Fichier cible | Dépôt | État |\n|---|---|---|\n",
+				step.Order, len(step.RepoItems)); err != nil {
+				return err
+			}
+			for _, item := range step.RepoItems {
+				name := markdownCell(item.Repo.Name)
+				state := "officiel"
+				if item.RequiresConfirmation {
+					name = "**" + name + "** ⚠"
+					state = "tiers — confirmation requise"
+				}
+				if _, err := fmt.Fprintf(w, "| %s | %s | %s |\n",
+					markdownCell(item.TargetPath), name, state); err != nil {
+					return err
+				}
+			}
+			continue
+		}
 		command := markdownCommand(step)
 		if _, err := fmt.Fprintf(w, "\n## Étape %d — %s (%d items)\n\n```sh\n%s\n```\n\n| Source | Cible | Statut | Confiance | Raison |\n|---|---|---|---|---|\n",
 			step.Order, step.Manager, len(step.Items), command); err != nil {
