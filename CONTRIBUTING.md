@@ -14,6 +14,7 @@ Les tests d'intégration valident le comportement de `xpose apply` dans un conte
 - **Test D** : Mode dry-run hermétique (aucune altération du système)
 - **Test E** : Garde-fou anti-destruction (rejet d'actions comme `remove`)
 - **Test F** : Refus interactif de restauration de dépôt tiers (`n`)
+- **Test G** : Création et restauration d'archive portable `.tar.zst` (`xpose pack` + `xpose apply archive.tar.zst`)
 
 ### Exécution locale
 

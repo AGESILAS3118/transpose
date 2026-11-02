@@ -8,3 +8,21 @@ distribution.
 
 See [PRD-Transpose.md](PRD-Transpose.md) for the product requirements and
 [AVANCEMENT.txt](AVANCEMENT.txt) for project progress.
+
+## Usage
+
+```bash
+# Capturer le système source
+xpose capture -o manifest.yaml
+
+# Créer une archive portable autonome (.tar.zst)
+xpose pack manifest.yaml -o ma-machine.tar.zst
+
+# Transporter l'archive sur la machine cible, puis :
+# 1. Simuler (dry-run par défaut)
+xpose apply ma-machine.tar.zst
+
+# 2. Appliquer réellement
+xpose apply ma-machine.tar.zst --apply --yes
+```
+
