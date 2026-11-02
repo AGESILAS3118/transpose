@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/transpose-project/transpose/internal/adapter"
+	"github.com/transpose-project/transpose/internal/archive"
 	"github.com/transpose-project/transpose/internal/executor"
 	"github.com/transpose-project/transpose/internal/planner"
 	"github.com/transpose-project/transpose/internal/resolver"
@@ -166,9 +167,32 @@ func newApplyCmdWithRunner(runner adapter.CommandRunner, customConfirmer executo
 }
 
 func loadPlanOrManifest(filePath string, cmd *cobra.Command, only, exclude []string) (*planner.Plan, error) {
-	data, err := os.ReadFile(filePath)
+	targetFile := filePath
+	lower := strings.ToLower(filePath)
+	isArchive := strings.HasSuffix(lower, ".tar.zst") ||
+		strings.HasSuffix(lower, ".tzst") ||
+		strings.HasSuffix(lower, ".tar.zstd")
+
+	if isArchive {
+		tmpDir, err := os.MkdirTemp("", "xpose-unpack-*")
+		if err != nil {
+			return nil, err
+		}
+		defer os.RemoveAll(tmpDir)
+
+		unpackRes, err := archive.Unpack(archive.UnpackOptions{
+			ArchivePath: filePath,
+			TargetDir:   tmpDir,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("extraction de l'archive impossible: %w", err)
+		}
+		targetFile = unpackRes.ManifestPath
+	}
+
+	data, err := os.ReadFile(targetFile)
 	if err != nil {
-		return nil, fmt.Errorf("impossible de lire %s: %w", filePath, err)
+		return nil, fmt.Errorf("impossible de lire %s: %w", targetFile, err)
 	}
 
 	// Try unmarshaling as Plan first
