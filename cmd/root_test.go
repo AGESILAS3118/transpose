@@ -27,7 +27,6 @@ func TestRootCommandContainsExpectedSubcommands(t *testing.T) {
 
 func TestPlaceholderCommandsReturnNotImplemented(t *testing.T) {
 	tests := [][]string{
-		{"pack", "manifest.yaml"},
 		{"diff", "source.yaml", "target.yaml"},
 	}
 	for _, args := range tests {

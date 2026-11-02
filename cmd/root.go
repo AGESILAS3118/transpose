@@ -32,11 +32,8 @@ func newRootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().StringSlice("only", nil, "Limit operations to these components")
 	rootCmd.PersistentFlags().StringSlice("exclude", nil, "Exclude these components")
 
-	packCmd := newPlaceholderCmd("pack <manifest>", "Create a portable archive from a manifest", cobra.ExactArgs(1))
-	packCmd.Flags().StringP("output", "o", "", "Write the archive to this file")
-	packCmd.Flags().Bool("encrypt", false, "Encrypt the archive with a passphrase")
 	rootCmd.AddCommand(
-		packCmd,
+		newPackCmd(),
 		newPlanCmd(),
 		newApplyCmd(),
 		newPlaceholderCmd("diff <manifest-a> <manifest-b>", "Compare two manifests", cobra.ExactArgs(2)),
