@@ -64,3 +64,36 @@ jobs:
         run: |
           chmod +x scripts/test-integration.sh
           ./scripts/test-integration.sh docker
+
+  apt-integration:
+    name: Ubuntu APT Capture Integration
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Build static xpose binary
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=0 go build -o bin/xpose .
+
+      - name: Test APT capture on Ubuntu runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq htop vim wget curl tree jq > /dev/null
+          ./bin/xpose doctor
+          ./bin/xpose capture --only apt -o /tmp/state.yaml
+          head -30 /tmp/state.yaml
+          for pkg in htop tree vim curl jq; do
+            grep -q "name: $pkg" /tmp/state.yaml || { echo "❌ $pkg manquant"; exit 1; }
+          done
+          grep -q "apt: 1" /tmp/state.yaml || { echo "❌ capture_level apt != 1"; exit 1; }
+          echo "✅ APT capture integration test successful"
