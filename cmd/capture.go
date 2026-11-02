@@ -69,12 +69,6 @@ func newCaptureCmdWithAdaptersAndRepoCollectors(adapters []adapter.Adapter, repo
 				if _, skip := excludedSet[name]; skip {
 					continue
 				}
-				if name == "apt" {
-					if isSelected {
-						return pkgAdapterError(name, "capture non implémentée")
-					}
-					continue
-				}
 				present, err := pkgAdapter.Detect()
 				if err != nil {
 					return fmt.Errorf("détection de %s impossible: %w", name, err)
