@@ -9,6 +9,7 @@ import (
 
 	"github.com/transpose-project/transpose/internal/archive"
 	"github.com/transpose-project/transpose/internal/executor"
+	"github.com/transpose-project/transpose/internal/sysutil"
 	"github.com/transpose-project/transpose/pkg/manifest"
 )
 
@@ -240,9 +241,13 @@ func TestApply_RejectsDestructivePlan(t *testing.T) {
 }
 
 func sampleArchiveManifestYAML() string {
+	distro := "fedora"
+	if target, err := sysutil.DetectCurrent(); err == nil && target != nil && target.Distro != "" {
+		distro = target.Distro
+	}
 	return `schema: 1
 source:
-  distro: fedora
+  distro: ` + distro + `
   version: "40"
   arch: amd64
 packages:
