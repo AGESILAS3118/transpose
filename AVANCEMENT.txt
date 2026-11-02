@@ -37,7 +37,7 @@ Dernière mise à jour : 2026-10-16
 
 [PHASE 1 — MVP v0.1 → v0.3] (6-8 semaines)
 MVP v0.1 — même famille Fedora ↔ Fedora + Flatpak
-[ ] F1  — Capture dnf/rpm + apt/dpkg avec repli en cascade + doctor
+[x] F1  — Capture dnf/rpm + apt/dpkg avec repli en cascade + doctor — terminé le 2026-11-02
 [x] F2  — Capture Flatpak (système/utilisateur, remotes, overrides) — terminé le 2026-10-16
 [x] F3  — Manifeste YAML/JSON avec schéma, sérialisation et validation — terminé le 2026-10-16
 [x] F4  — Résolveur même-famille par nom exact, overrides et alternatives Flatpak — terminé le 2026-10-16
