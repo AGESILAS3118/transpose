@@ -38,7 +38,7 @@ func newRootCmd() *cobra.Command {
 	rootCmd.AddCommand(
 		packCmd,
 		newPlanCmd(),
-		newPlaceholderCmd("apply <manifest>", "Apply a validated migration plan", cobra.ExactArgs(1)),
+		newApplyCmd(),
 		newPlaceholderCmd("diff <manifest-a> <manifest-b>", "Compare two manifests", cobra.ExactArgs(2)),
 	)
 	rootCmd.AddCommand(newResolveCmd())
