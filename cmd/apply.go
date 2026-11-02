@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/transpose-project/transpose/internal/resolver"
 	"github.com/transpose-project/transpose/internal/sysutil"
 	"github.com/transpose-project/transpose/pkg/manifest"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -42,7 +44,7 @@ func (c *interactiveConfirmer) ConfirmThirdPartyRepo(repo manifest.Repo) (bool, 
 }
 
 func newApplyCmd() *cobra.Command {
-	return newApplyCmdWithRunner(adapter.ExecCommandRunner, nil)
+	return newApplyCmdWithRunner(nil, nil)
 }
 
 func newApplyCmdWithRunner(runner adapter.CommandRunner, customConfirmer executor.Confirmer) *cobra.Command {
@@ -81,8 +83,25 @@ func newApplyCmdWithRunner(runner adapter.CommandRunner, customConfirmer executo
 				confirmer = &interactiveConfirmer{in: cmd.InOrStdin(), out: cmd.OutOrStdout()}
 			}
 
+			// Detect TTY (or injected test confirmer)
+			isTTY := term.IsTerminal(int(os.Stdin.Fd())) || customConfirmer != nil
+			interactive := isTTY && !yesFlag
+
+			// Setup runner if not provided (tests may provide a mock runner)
+			execRunner := runner
+			if execRunner == nil {
+				if interactive {
+					execRunner = adapter.ExecCommandRunnerInteractive
+				} else {
+					execRunner = adapter.ExecCommandRunner
+				}
+			}
+
 			// Interactive confirmation if --apply is set without --yes
 			if applyFlag && !yesFlag {
+				if !isTTY {
+					return errors.New("mode réel sans TTY : utilisez --yes ou attachez un TTY")
+				}
 				confirmed, err := confirmer.Confirm("Appliquer ce plan d'installation sur le système cible ?")
 				if err != nil {
 					return err
@@ -94,13 +113,14 @@ func newApplyCmdWithRunner(runner adapter.CommandRunner, customConfirmer executo
 			}
 
 			opts := executor.ExecOptions{
-				Apply:      applyFlag,
-				Yes:        yesFlag,
-				JournalDir: journalDirFlag,
-				Resume:     resumeFlag,
-				Verbose:    verboseFlag,
-				Runner:     runner,
-				Confirmer:  confirmer,
+				Apply:       applyFlag,
+				Yes:         yesFlag,
+				Interactive: interactive,
+				JournalDir:  journalDirFlag,
+				Resume:      resumeFlag,
+				Verbose:     verboseFlag,
+				Runner:      execRunner,
+				Confirmer:   confirmer,
 			}
 
 			startTime := time.Now()
