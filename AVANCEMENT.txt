@@ -265,6 +265,21 @@ ignorant les succès et ne rejouant que les items en attente ou échoués. Confi
 interactive systématique pour les dépôts tiers. 77 tests au total passent
 avec succès.
 
+2026-11-02 — F6 (correctif & validation réelle en conteneur) : correction
+du runner pour supporter les prompts interactifs des gestionnaires de paquets.
+Ajout de `ExecCommandRunnerInteractive` avec `c.Stdin = os.Stdin` et capture
+simultanée via `io.MultiWriter`. Détection TTY via `golang.org/x/term` :
+si TTY et sans `--yes`, exécution interactive avec affichage des prompts DNF
+et saisie utilisateur via stdin ; si hors TTY (CI) et sans `--yes`, refus
+explicite immédiat avec message clair. Si `--yes`, passage automatique de `-y`
+à DNF/APT. Validation complète en conditions réelles dans un conteneur Podman
+Fedora 44 :
+  - Test A (interactif avec TTY) : prompts DNF acceptés, paquets réinstallés.
+  - Test B (non-interactif avec `--yes`) : réinstallation directe sans prompt.
+  - Test C (`--resume --apply --yes`) : reprise sans rejouer les étapes terminées.
+Machine hôte strictement intacte (3544 paquets RPM). Tous les tests unitaires
+passent (82 tests).
+
 ====================================================
 LOGIQUE DE MISE À JOUR :
 - Coche [x] dès qu'une tâche est terminée et vérifiée
