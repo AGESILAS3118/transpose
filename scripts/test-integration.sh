@@ -28,17 +28,15 @@ fi
 
 # Ensure xpose binary is built statically
 BIN_PATH="${ROOT_DIR}/bin/xpose"
-if [ ! -f "${BIN_PATH}" ]; then
-    echo "Building xpose statically (CGO_ENABLED=0)..."
-    mkdir -p "${ROOT_DIR}/bin"
-    (
-        cd "${ROOT_DIR}"
-        export PATH="${HOME}/.local/go-toolchain/go/bin:${PATH}"
-        CGO_ENABLED=0 go build -o bin/xpose .
-    )
-fi
+echo "Building xpose statically (CGO_ENABLED=0)..."
+mkdir -p "${ROOT_DIR}/bin"
+(
+    cd "${ROOT_DIR}"
+    export PATH="${HOME}/.local/go-toolchain/go/bin:${PATH}"
+    CGO_ENABLED=0 go build -o bin/xpose .
+)
 
-echo "Running tests A-F inside ${IMAGE} container..."
+echo "Running tests A-G inside ${IMAGE} container..."
 
 "${RUNTIME}" run --rm -i \
     -v "${BIN_PATH}:/usr/local/bin/xpose:ro" \
@@ -46,9 +44,9 @@ echo "Running tests A-F inside ${IMAGE} container..."
 set -euo pipefail
 
 echo "--- [Setup] Installing prerequisites inside container ---"
-# fedora:44 provides /usr/bin/script in util-linux-script
-if ! dnf install -y util-linux-script >/dev/null 2>&1; then
-    dnf install -y util-linux >/dev/null 2>&1
+# fedora:44 provides /usr/bin/script in util-linux-script, and zstd for archive tests
+if ! dnf install -y util-linux-script zstd >/dev/null 2>&1; then
+    dnf install -y util-linux zstd >/dev/null 2>&1
 fi
 
 if [ ! -x /usr/bin/script ]; then
@@ -263,8 +261,42 @@ else
     exit 1
 fi
 
+# ==============================================================================
+# TEST G: Pack + Apply portable .tar.zst archive
+# ==============================================================================
+echo "=== Running Test G: Pack + Apply portable archive (.tar.zst) ==="
+ARCHIVE_MANIFEST="/tmp/xpose-tests/manifest-g.yaml"
+ARCHIVE_OUT="/tmp/xpose-tests/archive-g.tar.zst"
+rm -f "${ARCHIVE_OUT}"
+
+/usr/local/bin/xpose capture --only dnf -o "${ARCHIVE_MANIFEST}" >/dev/null
+/usr/local/bin/xpose pack "${ARCHIVE_MANIFEST}" -o "${ARCHIVE_OUT}" >/dev/null
+
+if [ ! -f "${ARCHIVE_OUT}" ]; then
+    echo "❌ Test G FAILED: archive ${ARCHIVE_OUT} was not created" >&2
+    exit 1
+fi
+
+# Verify archive contents via zstd decompression into tar
+zstd -dc "${ARCHIVE_OUT}" | tar -tf - | grep -q "^manifest.yaml$" \
+  || { echo "❌ Test G FAILED: manifest.yaml absent de l'archive" >&2; exit 1; }
+zstd -dc "${ARCHIVE_OUT}" | tar -tf - | grep -q "^meta.json$" \
+  || { echo "❌ Test G FAILED: meta.json absent de l'archive" >&2; exit 1; }
+
+# Dry-run apply on archive must not alter installed packages
+BEFORE_G=$(rpm -qa | sort)
+/usr/local/bin/xpose apply "${ARCHIVE_OUT}" >/dev/null
+AFTER_G=$(rpm -qa | sort)
+
+if [ "${BEFORE_G}" = "${AFTER_G}" ]; then
+    echo "✅ Test G OK: Pack produced valid archive and dry-run apply succeeded hermetically"
+else
+    echo "❌ Test G FAILED: dry-run on archive modified system packages" >&2
+    exit 1
+fi
+
 echo ""
-echo "🎉 TOUS LES TESTS D'INTÉGRATION PASSENT (A-F)"
+echo "🎉 TOUS LES TESTS D'INTÉGRATION PASSENT (A-G)"
 CONTAINER_EOF
 
 echo "All container integration tests completed successfully with ${RUNTIME}."
