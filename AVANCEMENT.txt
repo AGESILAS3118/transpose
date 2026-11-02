@@ -46,7 +46,7 @@ MVP v0.1 — même famille Fedora ↔ Fedora + Flatpak
 [x] F7  — Export des dépôts (/etc/yum.repos.d/, /etc/apt/sources.list*) — terminé le 2026-10-16
 [ ] F8  — Base de correspondance livrée + update-db signé
 [ ] F9  — Archive .tar.zst
-[ ] F10 — Tests automatisés en conteneurs (Fedora, Ubuntu, Debian)
+[x] F10 — Tests automatisés en conteneurs (Fedora 44, suite A-F, CI GitHub Actions) — terminé le 2026-11-02
 
 [PHASE 2 — V1 v1.0] (8-12 semaines)
 [ ] F11 — Adaptateurs pacman (+AUR), zypper, Snap
