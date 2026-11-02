@@ -42,7 +42,7 @@ MVP v0.1 — même famille Fedora ↔ Fedora + Flatpak
 [x] F3  — Manifeste YAML/JSON avec schéma, sérialisation et validation — terminé le 2026-10-16
 [x] F4  — Résolveur même-famille par nom exact, overrides et alternatives Flatpak — terminé le 2026-10-16
 [x] F5  — Génération et rendu des plans terminal, Markdown et JSON — terminé le 2026-10-16
-[ ] F6  — Exécution dnf, apt, Flatpak, avec journal et reprise
+[x] F6  — Exécution dnf, apt, Flatpak, avec journal et reprise — terminé le 2026-11-02
 [x] F7  — Export des dépôts (/etc/yum.repos.d/, /etc/apt/sources.list*) — terminé le 2026-10-16
 [ ] F8  — Base de correspondance livrée + update-db signé
 [ ] F9  — Archive .tar.zst
@@ -252,6 +252,18 @@ Cette config est locale au clone, pas globale. Prochaine étape : F6
 2026-10-16 — core.filemode=false configuré en local (dépôt sur volume NTFS).
 
 2026-10-16 — F2 confirmée : capture Flatpak système/utilisateur, remotes, overrides et repli sur répertoires validés (P0.2 + tests). Marquée terminée.
+
+2026-11-02 — F6 : exécuteur avec journal et reprise. Commande `xpose apply`
+avec mode dry-run par défaut (simulation sans modification système, vérifié
+par compte rpm identique avant/après). Journal JSONL append-only avec permissions
+strictes 0700/0600, écritures avant chaque action (statut pending), journalisation
+complète des étapes. Garde-fou de sécurité anti-destruction rejetant toute
+action de suppression (remove, erase, autoremove, purge, -R, clean) et interdisant
+les plans cross-family non supportés. Gestion par lots (batch) avec repli
+automatique au niveau unitaire en cas d'erreur de lot. Reprise avec `xpose apply --resume`
+ignorant les succès et ne rejouant que les items en attente ou échoués. Confirmation
+interactive systématique pour les dépôts tiers. 77 tests au total passent
+avec succès.
 
 ====================================================
 LOGIQUE DE MISE À JOUR :

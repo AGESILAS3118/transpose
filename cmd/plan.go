@@ -14,6 +14,7 @@ import (
 	"github.com/transpose-project/transpose/internal/resolver"
 	"github.com/transpose-project/transpose/internal/sysutil"
 	"github.com/transpose-project/transpose/pkg/manifest"
+	"gopkg.in/yaml.v3"
 )
 
 func newPlanCmd() *cobra.Command {
@@ -61,8 +62,8 @@ func newPlanCmdWithQuerierFactory(factory repoQuerierFactory) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if format != "terminal" && format != "markdown" && format != "json" {
-				return fmt.Errorf("format inconnu %q (attendu terminal, markdown ou json)", format)
+			if format != "terminal" && format != "markdown" && format != "json" && format != "yaml" && format != "yml" {
+				return fmt.Errorf("format inconnu %q (attendu terminal, markdown, json ou yaml)", format)
 			}
 			verbose, err := cmd.Flags().GetBool("verbose")
 			if err != nil {
@@ -108,6 +109,10 @@ func newPlanCmdWithQuerierFactory(factory repoQuerierFactory) *cobra.Command {
 					return planner.RenderMarkdown(plan, writer)
 				case "json":
 					return planner.RenderJSON(plan, writer)
+				case "yaml", "yml":
+					enc := yaml.NewEncoder(writer)
+					defer enc.Close()
+					return enc.Encode(plan)
 				}
 				return fmt.Errorf("format inconnu %q", format)
 			}
@@ -122,7 +127,7 @@ func newPlanCmdWithQuerierFactory(factory repoQuerierFactory) *cobra.Command {
 		},
 	}
 	command.Flags().String("target", "", "Target distribution (for example fedora-44 or debian_13)")
-	command.Flags().String("format", "terminal", "Plan format (terminal|markdown|json)")
+	command.Flags().String("format", "terminal", "Plan format (terminal|markdown|json|yaml)")
 	command.Flags().StringP("output", "o", "", "Write the plan to a file instead of stdout")
 	command.Flags().Bool("verbose", false, "Show every package in terminal output")
 	command.Flags().String("overrides", "", "Load package name overrides from YAML")
