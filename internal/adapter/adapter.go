@@ -1,7 +1,10 @@
 package adapter
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 )
 
@@ -63,4 +66,19 @@ func ExecCommandRunner(name string, args ...string) ([]byte, error) {
 		return stdout, fmt.Errorf("%s: %w: %s", name, err, exitErr.Stderr)
 	}
 	return stdout, fmt.Errorf("%s: %w", name, err)
+}
+
+func ExecCommandRunnerInteractive(name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Stdin = os.Stdin
+
+	var buf bytes.Buffer
+	cmd.Stdout = io.MultiWriter(os.Stdout, &buf)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &buf)
+
+	err := cmd.Run()
+	if err == nil {
+		return buf.Bytes(), nil
+	}
+	return buf.Bytes(), fmt.Errorf("%s: %w", name, err)
 }

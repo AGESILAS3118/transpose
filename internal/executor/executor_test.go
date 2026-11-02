@@ -94,6 +94,7 @@ func TestExecute_ApplyRunsCommands(t *testing.T) {
 
 	opts := ExecOptions{
 		Apply:      true,
+		Yes:        true,
 		JournalDir: tmpDir,
 		Runner:     runner,
 	}
@@ -149,6 +150,7 @@ func TestExecute_BatchFallbackOnFailure(t *testing.T) {
 
 	opts := ExecOptions{
 		Apply:      true,
+		Yes:        true,
 		JournalDir: tmpDir,
 		Runner:     runner,
 	}
@@ -200,6 +202,7 @@ func TestExecute_OneItemFailsOthersSucceed(t *testing.T) {
 
 	opts := ExecOptions{
 		Apply:      true,
+		Yes:        true,
 		JournalDir: tmpDir,
 		Runner:     runner,
 	}
@@ -248,6 +251,7 @@ func TestExecute_RecordsJournalBeforeExecution(t *testing.T) {
 
 	opts := ExecOptions{
 		Apply:      true,
+		Yes:        true,
 		JournalDir: tmpDir,
 		Runner:     runner,
 	}
@@ -318,6 +322,7 @@ func TestExecute_ReposComeFirst(t *testing.T) {
 	confirmer := &mockConfirmer{repoResult: true}
 	opts := ExecOptions{
 		Apply:      true,
+		Yes:        true,
 		JournalDir: tmpDir,
 		Runner:     runner,
 		Confirmer:  confirmer,
@@ -337,5 +342,135 @@ func TestExecute_ReposComeFirst(t *testing.T) {
 	}
 	if !strings.Contains(executionOrder[1], "dnf") {
 		t.Errorf("expected dnf second, got %s", executionOrder[1])
+	}
+}
+
+func TestBuildInstallCommand_DnfInteractive(t *testing.T) {
+	cmd, args := buildInstallCommand("dnf", []string{"htop"}, false)
+	if cmd != "sudo" {
+		t.Errorf("expected sudo, got %s", cmd)
+	}
+	line := strings.Join(args, " ")
+	if line != "dnf install htop" {
+		t.Errorf("expected 'dnf install htop', got %s", line)
+	}
+}
+
+func TestBuildInstallCommand_DnfYes(t *testing.T) {
+	cmd, args := buildInstallCommand("dnf", []string{"htop"}, true)
+	if cmd != "sudo" {
+		t.Errorf("expected sudo, got %s", cmd)
+	}
+	line := strings.Join(args, " ")
+	if line != "dnf install -y htop" {
+		t.Errorf("expected 'dnf install -y htop', got %s", line)
+	}
+}
+
+func TestExecutor_InteractiveMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	var commandsRun []string
+	runner := func(cmd string, args ...string) ([]byte, error) {
+		commandsRun = append(commandsRun, cmd+" "+strings.Join(args, " "))
+		return []byte("ok"), nil
+	}
+
+	p := &planner.Plan{
+		Source: manifest.Source{Distro: "fedora"},
+		Target: sysutil.Target{Distro: "fedora", Family: "rpm"},
+		Steps: []planner.PlanStep{
+			{
+				Order:   1,
+				Manager: "dnf",
+				Action:  "install",
+				Items:   []planner.PlanItem{{Source: "htop", Target: "htop"}},
+			},
+		},
+	}
+
+	opts := ExecOptions{
+		Apply:       true,
+		Interactive: true,
+		Yes:         false,
+		JournalDir:  tmpDir,
+		Runner:      runner,
+	}
+
+	_, err := Execute(context.Background(), p, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(commandsRun) != 1 || strings.Contains(commandsRun[0], "-y") {
+		t.Errorf("interactive mode should not contain -y: %v", commandsRun)
+	}
+}
+
+func TestExecutor_AssumeYesMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	var commandsRun []string
+	runner := func(cmd string, args ...string) ([]byte, error) {
+		commandsRun = append(commandsRun, cmd+" "+strings.Join(args, " "))
+		return []byte("ok"), nil
+	}
+
+	p := &planner.Plan{
+		Source: manifest.Source{Distro: "fedora"},
+		Target: sysutil.Target{Distro: "fedora", Family: "rpm"},
+		Steps: []planner.PlanStep{
+			{
+				Order:   1,
+				Manager: "dnf",
+				Action:  "install",
+				Items:   []planner.PlanItem{{Source: "htop", Target: "htop"}},
+			},
+		},
+	}
+
+	opts := ExecOptions{
+		Apply:      true,
+		Yes:        true,
+		JournalDir: tmpDir,
+		Runner:     runner,
+	}
+
+	_, err := Execute(context.Background(), p, opts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(commandsRun) != 1 || !strings.Contains(commandsRun[0], "-y") {
+		t.Errorf("assume-yes mode should contain -y: %v", commandsRun)
+	}
+}
+
+func TestExecutor_NoTTYWithoutYes(t *testing.T) {
+	tmpDir := t.TempDir()
+	p := &planner.Plan{
+		Source: manifest.Source{Distro: "fedora"},
+		Target: sysutil.Target{Distro: "fedora", Family: "rpm"},
+		Steps: []planner.PlanStep{
+			{
+				Order:   1,
+				Manager: "dnf",
+				Action:  "install",
+				Items:   []planner.PlanItem{{Source: "htop", Target: "htop"}},
+			},
+		},
+	}
+
+	opts := ExecOptions{
+		Apply:       true,
+		Yes:         false,
+		Interactive: false,
+		JournalDir:  tmpDir,
+	}
+
+	_, err := Execute(context.Background(), p, opts)
+	if err == nil {
+		t.Fatal("expected error when running in non-interactive mode without --yes, got nil")
+	}
+	if !strings.Contains(err.Error(), "mode réel sans TTY") {
+		t.Errorf("expected no TTY error, got: %v", err)
 	}
 }

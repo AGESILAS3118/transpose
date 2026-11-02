@@ -107,6 +107,10 @@ func Resume(ctx context.Context, journalPath string, p *planner.Plan, opts ExecO
 		return res, nil
 	}
 
+	if opts.Apply && !opts.Yes && !opts.Interactive {
+		return nil, errors.New("mode réel sans TTY : utilisez --yes ou attachez un TTY")
+	}
+
 	runner := opts.Runner
 	if runner == nil {
 		runner = adapter.ExecCommandRunner

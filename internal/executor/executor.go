@@ -20,15 +20,16 @@ type Confirmer interface {
 }
 
 type ExecOptions struct {
-	Apply      bool
-	Yes        bool
-	JournalDir string
-	Resume     bool
-	Offline    bool
-	Verbose    bool
-	Runner     adapter.CommandRunner
-	Confirmer  Confirmer
-	Now        func() time.Time
+	Apply       bool
+	Yes         bool
+	Interactive bool
+	JournalDir  string
+	Resume      bool
+	Offline     bool
+	Verbose     bool
+	Runner      adapter.CommandRunner
+	Confirmer   Confirmer
+	Now         func() time.Time
 }
 
 type ExecutionSummary struct {
@@ -66,6 +67,9 @@ func Execute(ctx context.Context, p *planner.Plan, opts ExecOptions) (*Result, e
 	}
 	if err := ValidateSameFamily(p); err != nil {
 		return nil, fmt.Errorf("family validation failed: %w", err)
+	}
+	if opts.Apply && !opts.Yes && !opts.Interactive {
+		return nil, errors.New("mode réel sans TTY : utilisez --yes ou attachez un TTY")
 	}
 
 	runner := opts.Runner
@@ -320,7 +324,7 @@ func executePackageStep(ctx context.Context, j *Journal, step planner.PlanStep, 
 	res.Summary.TotalItems += len(targets)
 
 	// Attempt batch first
-	batchCmd, batchArgs := buildInstallCommand(step.Manager, targets)
+	batchCmd, batchArgs := buildInstallCommand(step.Manager, targets, opts.Yes)
 	displayCmd := formatCommandLine(batchCmd, batchArgs)
 
 	// Log batch pending
@@ -376,7 +380,7 @@ func executePackageStep(ctx context.Context, j *Journal, step planner.PlanStep, 
 
 	var hasItemError bool
 	for _, target := range targets {
-		singleCmd, singleArgs := buildInstallCommand(step.Manager, []string{target})
+		singleCmd, singleArgs := buildInstallCommand(step.Manager, []string{target}, opts.Yes)
 		singleDisplay := formatCommandLine(singleCmd, singleArgs)
 
 		// Log single pending
@@ -437,18 +441,28 @@ func executePackageStep(ctx context.Context, j *Journal, step planner.PlanStep, 
 	return nil
 }
 
-func buildInstallCommand(manager string, targets []string) (string, []string) {
+func buildInstallCommand(manager string, targets []string, assumeYes bool) (string, []string) {
 	switch strings.ToLower(manager) {
 	case "dnf":
-		// Sudo without -n, no automatic -y
-		args := append([]string{"dnf", "install"}, targets...)
+		args := []string{"dnf", "install"}
+		if assumeYes {
+			args = append(args, "-y")
+		}
+		args = append(args, targets...)
 		return "sudo", args
 	case "apt":
-		args := append([]string{"apt-get", "install"}, targets...)
+		args := []string{"apt-get", "install"}
+		if assumeYes {
+			args = append(args, "-y")
+		}
+		args = append(args, targets...)
 		return "sudo", args
 	case "flatpak":
-		// flatpak install flathub <targets...>
-		args := append([]string{"install", "--noninteractive"}, targets...)
+		args := []string{"install"}
+		if assumeYes {
+			args = append(args, "--noninteractive")
+		}
+		args = append(args, targets...)
 		return "flatpak", args
 	default:
 		return manager, targets

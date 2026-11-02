@@ -50,6 +50,7 @@ func TestResume_SkipsSuccess(t *testing.T) {
 
 	opts := ExecOptions{
 		Apply:      true,
+		Yes:        true,
 		JournalDir: tmpDir,
 		Runner:     runner,
 	}
@@ -115,6 +116,7 @@ func TestResume_ReplaysPending(t *testing.T) {
 
 	opts := ExecOptions{
 		Apply:      true,
+		Yes:        true,
 		JournalDir: tmpDir,
 		Runner:     runner,
 	}
@@ -167,6 +169,7 @@ func TestResume_NoIncompleteActions(t *testing.T) {
 
 	opts := ExecOptions{
 		Apply:      true,
+		Yes:        true,
 		JournalDir: tmpDir,
 		Runner:     runner,
 	}
